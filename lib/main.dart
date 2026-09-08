@@ -1,49 +1,43 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
+final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.light);
+
 void main() {
   runApp(const SmartSchedulerApp());
 }
 
-class SmartSchedulerApp extends StatefulWidget {
+class SmartSchedulerApp extends StatelessWidget {
   const SmartSchedulerApp({super.key});
 
   @override
-  State<SmartSchedulerApp> createState() => _SmartSchedulerAppState();
-}
-
-class _SmartSchedulerAppState extends State<SmartSchedulerApp> {
-  ThemeMode _themeMode = ThemeMode.light;
-
-  void _toggleTheme(bool isDark) {
-    setState(() {
-      _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Smart Resource Scheduler',
-      debugShowCheckedModeBanner: false,
-      themeMode: _themeMode,
-      theme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.light,
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo, brightness: Brightness.light),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo, brightness: Brightness.dark),
-        scaffoldBackgroundColor: const Color(0xFF121212),
-      ),
-      home: LoginScreen(onThemeChanged: _toggleTheme, currentThemeMode: _themeMode),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeNotifier,
+      builder: (context, currentMode, child) {
+        return MaterialApp(
+          title: 'Smart Resource Scheduler',
+          debugShowCheckedModeBanner: false,
+          themeMode: currentMode,
+          theme: ThemeData(
+            useMaterial3: true,
+            brightness: Brightness.light,
+            colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo, brightness: Brightness.light),
+          ),
+          darkTheme: ThemeData(
+            useMaterial3: true,
+            brightness: Brightness.dark,
+            colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo, brightness: Brightness.dark),
+            scaffoldBackgroundColor: const Color(0xFF121212),
+          ),
+          home: const LoginScreen(),
+        );
+      },
     );
   }
 }
 
-// 1. MODELS & USER ROLES
+// 1. MODELS & DATA STRUCTURES
 enum UserRole { admin, viewer }
 
 class UserSession {
@@ -55,12 +49,19 @@ class UserSession {
   bool get isAdmin => role == UserRole.admin;
 }
 
-class Resource {
-  final String id;
-  final String name;
-  final String type;
+class Category {
+  String id;
+  String name;
+  List<Resource> resources;
 
-  Resource({required this.id, required this.name, required this.type});
+  Category({required this.id, required this.name, required this.resources});
+}
+
+class Resource {
+  String id;
+  String name;
+
+  Resource({required this.id, required this.name});
 }
 
 class ScheduleBooking {
@@ -83,10 +84,7 @@ class ScheduleBooking {
 
 // 2. LOGIN SCREEN
 class LoginScreen extends StatefulWidget {
-  final Function(bool) onThemeChanged;
-  final ThemeMode currentThemeMode;
-
-  const LoginScreen({super.key, required this.onThemeChanged, required this.currentThemeMode});
+  const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -111,19 +109,52 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (session != null) {
       setState(() => errorMessage = null);
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => SetupWizardScreen(
-            session: session!,
-            onThemeChanged: widget.onThemeChanged,
-            currentThemeMode: widget.currentThemeMode,
-          ),
+      
+      // Αρχικά δεδομένα κατηγοριών
+      List<Category> initialCategories = [
+        Category(
+          id: 'cat1',
+          name: 'Εκπαιδευτικά Αεροπλάνα',
+          resources: [
+            Resource(id: 'r1', name: 'Cessna 172 (SX-ABC)'),
+            Resource(id: 'r2', name: 'Piper PA-28 (SX-DEF)'),
+          ],
         ),
-      );
+        Category(
+          id: 'cat2',
+          name: 'Επιβατικά / Ταξιδιωτικά',
+          resources: [
+            Resource(id: 'r3', name: 'Beechcraft Baron (SX-GHI)'),
+          ],
+        ),
+      ];
+
+      if (session.isAdmin) {
+        // Ο Admin οδηγείται πρώτα στη διαχείριση κατηγοριών
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => CategoryManagerScreen(
+              session: session!,
+              categories: initialCategories,
+            ),
+          ),
+        );
+      } else {
+        // Ο Viewer πηγαίνει απευθείας στο Setup Wizard
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SetupWizardScreen(
+              session: session!,
+              categories: initialCategories,
+            ),
+          ),
+        );
+      }
     } else {
       setState(() {
-        errorMessage = 'Λάθος Username ή Password (χρησιμοποιήστε admin/admin ή user/user)';
+        errorMessage = 'Λάθος Username ή Password (admin/admin ή user/user)';
       });
     }
   }
@@ -191,18 +222,267 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-// 3. SETUP WIZARD SCREEN
+// 3. CATEGORY & RESOURCE MANAGER SCREEN (ADMIN ONLY)
+class CategoryManagerScreen extends StatefulWidget {
+  final UserSession session;
+  final List<Category> categories;
+
+  const CategoryManagerScreen({super.key, required this.session, required this.categories});
+
+  @override
+  State<CategoryManagerScreen> createState() => _CategoryManagerScreenState();
+}
+
+class _CategoryManagerScreenState extends State<CategoryManagerScreen> {
+  late List<Category> categories;
+  Category? selectedCategory;
+  Resource? selectedResource;
+
+  @override
+  void initState() {
+    super.initState();
+    categories = widget.categories;
+    if (categories.isNotEmpty) {
+      selectedCategory = categories.first;
+      if (selectedCategory!.resources.isNotEmpty) {
+        selectedResource = selectedCategory!.resources.first;
+      }
+    }
+  }
+
+  void _addCategory() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Νέα Κατηγορία'),
+        content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'Όνομα Κατηγορίας')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Ακύρωση')),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                setState(() {
+                  final newCat = Category(id: DateTime.now().toString(), name: controller.text.trim(), resources: []);
+                  categories.add(newCat);
+                  selectedCategory = newCat;
+                  selectedResource = null;
+                });
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Προσθήκη'),
+          )
+        ],
+      ),
+    );
+  }
+
+  void _editCategory() {
+    if (selectedCategory == null) return;
+    final controller = TextEditingController(text: selectedCategory!.name);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Επεξεργασία Κατηγορίας'),
+        content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'Νέο Όνομα')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Ακύρωση')),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                setState(() {
+                  selectedCategory!.name = controller.text.trim();
+                });
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Αποθήκευση'),
+          )
+        ],
+      ),
+    );
+  }
+
+  void _deleteCategory() {
+    if (selectedCategory == null) return;
+    setState(() {
+      categories.remove(selectedCategory);
+      selectedCategory = categories.isNotEmpty ? categories.first : null;
+      selectedResource = selectedCategory != null && selectedCategory!.resources.isNotEmpty ? selectedCategory!.resources.first : null;
+    });
+  }
+
+  void _addResource() {
+    if (selectedCategory == null) return;
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Νέος Πόρος / Αεροπλάνο (${selectedCategory!.name})'),
+        content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'Όνομα Πόρου')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Ακύρωση')),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                setState(() {
+                  final newRes = Resource(id: DateTime.now().toString(), name: controller.text.trim());
+                  selectedCategory!.resources.add(newRes);
+                  selectedResource = newRes;
+                });
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Προσθήκη'),
+          )
+        ],
+      ),
+    );
+  }
+
+  void _editResource() {
+    if (selectedResource == null) return;
+    final controller = TextEditingController(text: selectedResource!.name);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Επεξεργασία Πόρου'),
+        content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'Νέο Όνομα')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Ακύρωση')),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                setState(() {
+                  selectedResource!.name = controller.text.trim();
+                });
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Αποθήκευση'),
+          )
+        ],
+      ),
+    );
+  }
+
+  void _deleteResource() {
+    if (selectedResource == null || selectedCategory == null) return;
+    setState(() {
+      selectedCategory!.resources.remove(selectedResource);
+      selectedResource = selectedCategory!.resources.isNotEmpty ? selectedCategory!.resources.first : null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    bool isDarkMode = themeNotifier.value == ThemeMode.dark;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Διαχείριση Κατηγοριών & Πόρων'),
+        actions: [
+          IconButton(
+            icon: Icon(isDarkMode ? Icons.light_mode : Icons.dark_mode),
+            onPressed: () {
+              themeNotifier.value = isDarkMode ? ThemeMode.light : ThemeMode.dark;
+            },
+          ),
+        ],
+      ),
+      body: Center(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 500),
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('1. Κατηγορίες (π.χ. Επιβατικά, Εκπαιδευτικά)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<Category>(
+                value: selectedCategory,
+                decoration: const InputDecoration(border: OutlineInputBorder()),
+                items: categories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat.name))).toList(),
+                onChanged: (val) {
+                  setState(() {
+                    selectedCategory = val;
+                    selectedResource = val != null && val.resources.isNotEmpty ? val.resources.first : null;
+                  });
+                },
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  IconButton.filledTonal(icon: const Icon(Icons.add), onPressed: _addCategory, tooltip: 'Προσθήκη Κατηγορίας'),
+                  const SizedBox(width: 8),
+                  IconButton.filledTonal(icon: const Icon(Icons.edit), onPressed: selectedCategory != null ? _editCategory : null, tooltip: 'Επεξεργασία Κατηγορίας'),
+                  const SizedBox(width: 8),
+                  IconButton.filledTonal(icon: const Icon(Icons.delete), onPressed: selectedCategory != null ? _deleteCategory : null, tooltip: 'Διαγραφή Κατηγορίας'),
+                ],
+              ),
+              const Divider(height: 32),
+              const Text('2. Υποκατηγορίες / Πόροι (π.χ. Αεροπλάνα)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<Resource>(
+                value: selectedResource,
+                decoration: const InputDecoration(border: OutlineInputBorder()),
+                items: selectedCategory != null
+                    ? selectedCategory!.resources.map((res) => DropdownMenuItem(value: res, child: Text(res.name))).toList()
+                    : [],
+                onChanged: (val) {
+                  setState(() {
+                    selectedResource = val;
+                  });
+                },
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  IconButton.filledTonal(icon: const Icon(Icons.add), onPressed: selectedCategory != null ? _addResource : null, tooltip: 'Προσθήκη Πόρου'),
+                  const SizedBox(width: 8),
+                  IconButton.filledTonal(icon: const Icon(Icons.edit), onPressed: selectedResource != null ? _editResource : null, tooltip: 'Επεξεργασία Πόρου'),
+                  const SizedBox(width: 8),
+                  IconButton.filledTonal(icon: const Icon(Icons.delete), onPressed: selectedResource != null ? _deleteResource : null, tooltip: 'Διαγραφή Πόρου'),
+                ],
+              ),
+              const Spacer(),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  backgroundColor: Colors.indigo,
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.arrow_forward),
+                label: const Text('Συνέχεια στο Setup Wizard'),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => SetupWizardScreen(
+                        session: widget.session,
+                        categories: categories,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// 4. SETUP WIZARD SCREEN
 class SetupWizardScreen extends StatefulWidget {
   final UserSession session;
-  final Function(bool) onThemeChanged;
-  final ThemeMode currentThemeMode;
+  final List<Category> categories;
 
-  const SetupWizardScreen({
-    super.key,
-    required this.session,
-    required this.onThemeChanged,
-    required this.currentThemeMode,
-  });
+  const SetupWizardScreen({super.key, required this.session, required this.categories});
 
   @override
   State<SetupWizardScreen> createState() => _SetupWizardScreenState();
@@ -215,7 +495,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    bool isDarkMode = widget.currentThemeMode == ThemeMode.dark;
+    bool isDarkMode = themeNotifier.value == ThemeMode.dark;
 
     return Scaffold(
       appBar: AppBar(
@@ -224,8 +504,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
           IconButton(
             icon: Icon(isDarkMode ? Icons.light_mode : Icons.dark_mode),
             onPressed: () {
-              widget.onThemeChanged(!isDarkMode);
-              setState(() {});
+              themeNotifier.value = isDarkMode ? ThemeMode.light : ThemeMode.dark;
             },
           ),
           IconButton(
@@ -233,12 +512,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
             onPressed: () {
               Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => LoginScreen(
-                    onThemeChanged: widget.onThemeChanged,
-                    currentThemeMode: widget.currentThemeMode,
-                  ),
-                ),
+                MaterialPageRoute(builder: (context) => const LoginScreen()),
               );
             },
           )
@@ -288,13 +562,17 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                 value: preventOverlaps,
                 onChanged: (val) => setState(() => preventOverlaps = val),
               ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Night / Dark Mode'),
-                value: isDarkMode,
-                onChanged: (val) {
-                  widget.onThemeChanged(val);
-                  setState(() {});
+              ValueListenableBuilder<ThemeMode>(
+                valueListenable: themeNotifier,
+                builder: (context, mode, child) {
+                  return SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Night / Dark Mode'),
+                    value: mode == ThemeMode.dark,
+                    onChanged: (val) {
+                      themeNotifier.value = val ? ThemeMode.dark : ThemeMode.light;
+                    },
+                  );
                 },
               ),
               const SizedBox(height: 28),
@@ -315,7 +593,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                         domain: selectedDomain,
                         slotMinutes: timeSlotMinutes,
                         preventOverlaps: preventOverlaps,
-                        onThemeChanged: widget.onThemeChanged,
+                        categories: widget.categories,
                       ),
                     ),
                   );
@@ -329,13 +607,13 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
   }
 }
 
-// 4. GRID SCREEN (WITH CURRENT TIME LINE & INSTANT DARK MODE TOGGLE)
+// 5. GRID SCREEN (WITH CATEGORY DIVIDERS IN SCHEDULING)
 class SchedulerGridScreen extends StatefulWidget {
   final UserSession session;
   final String domain;
   final int slotMinutes;
   final bool preventOverlaps;
-  final Function(bool) onThemeChanged;
+  final List<Category> categories;
 
   const SchedulerGridScreen({
     super.key,
@@ -343,7 +621,7 @@ class SchedulerGridScreen extends StatefulWidget {
     required this.domain,
     required this.slotMinutes,
     required this.preventOverlaps,
-    required this.onThemeChanged,
+    required this.categories,
   });
 
   @override
@@ -351,7 +629,6 @@ class SchedulerGridScreen extends StatefulWidget {
 }
 
 class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
-  late List<Resource> resources;
   late List<ScheduleBooking> bookings;
   late List<int> timeSlots;
   Timer? _timer;
@@ -362,7 +639,7 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
     super.initState();
     _now = DateTime.now();
     _generateSlots();
-    _loadDomainData();
+    _loadBookings();
     _timer = Timer.periodic(const Duration(minutes: 1), (timer) {
       if (mounted) {
         setState(() {
@@ -385,19 +662,10 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
     }
   }
 
-  void _loadDomainData() {
-    if (widget.domain == 'Aviation') {
-      resources = [
-        Resource(id: 'r1', name: 'Cessna 172 (SX-ABC)', type: 'Aircraft'),
-        Resource(id: 'r2', name: 'Piper PA-28 (SX-DEF)', type: 'Aircraft'),
-      ];
-      bookings = [
-        ScheduleBooking(id: 'b1', title: 'Flight Training', resourceId: 'r1', startMinuteFrom8AM: 60, durationMinutes: 120, color: Colors.blue.shade600),
-      ];
-    } else {
-      resources = [Resource(id: 'r1', name: 'Spot A-101', type: 'Bay')];
-      bookings = [ScheduleBooking(id: 'b1', title: 'Tesla Model 3', resourceId: 'r1', startMinuteFrom8AM: 0, durationMinutes: 180, color: Colors.green.shade600)];
-    }
+  void _loadBookings() {
+    bookings = [
+      ScheduleBooking(id: 'b1', title: 'Flight Training', resourceId: 'r1', startMinuteFrom8AM: 60, durationMinutes: 120, color: Colors.blue.shade600),
+    ];
   }
 
   String _formatMinutesToTime(int minutesFrom8) {
@@ -528,7 +796,7 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
 
     if (currentMinutesFrom8 >= 0 && currentMinutesFrom8 <= 600) {
       double pixelsPerMinute = slotWidth / widget.slotMinutes;
-      timeIndicatorOffset = 150.0 + (currentMinutesFrom8 * pixelsPerMinute);
+      timeIndicatorOffset = 180.0 + (currentMinutesFrom8 * pixelsPerMinute);
     }
 
     return Scaffold(
@@ -538,8 +806,7 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
           IconButton(
             icon: Icon(isDarkMode ? Icons.light_mode : Icons.dark_mode),
             onPressed: () {
-              widget.onThemeChanged(!isDarkMode);
-              setState(() {});
+              themeNotifier.value = isDarkMode ? ThemeMode.light : ThemeMode.dark;
             },
           ),
         ],
@@ -557,10 +824,10 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
                   Row(
                     children: [
                       Container(
-                        width: 150,
+                        width: 180,
                         height: 45,
                         color: isDarkMode ? Colors.grey.shade900 : Colors.grey.shade300,
-                        child: const Center(child: Text('Resources', style: TextStyle(fontWeight: FontWeight.bold))),
+                        child: const Center(child: Text('Κατηγορίες / Πόροι', style: TextStyle(fontWeight: FontWeight.bold))),
                       ),
                       ...timeSlots.map(
                         (min) => Container(
@@ -575,83 +842,102 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
                       ),
                     ],
                   ),
-                  // ROWS
-                  ...resources.map((res) {
-                    return Row(
+                  // CATEGORIES & RESOURCES WITH DIVIDERS
+                  ...widget.categories.map((cat) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // CATEGORY DIVIDER HEADER ROW
                         Container(
-                          width: 150,
-                          height: 55,
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          decoration: BoxDecoration(
-                            color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
-                            border: Border.all(color: isDarkMode ? Colors.grey.shade800 : Colors.grey.shade300),
+                          width: 180.0 + (timeSlots.length * slotWidth),
+                          height: 32,
+                          color: isDarkMode ? Colors.indigo.shade900.withOpacity(0.6) : Colors.indigo.shade100,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          child: Text(
+                            '📂 ${cat.name.toUpperCase()}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.indigo),
                           ),
-                          child: Align(alignment: Alignment.centerLeft, child: Text(res.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
                         ),
-                        ...timeSlots.map((slotMin) {
-                          final booking = bookings.firstWhere(
-                            (b) => b.resourceId == res.id && b.startMinuteFrom8AM == slotMin,
-                            orElse: () => ScheduleBooking(id: '', title: '', resourceId: '', startMinuteFrom8AM: -1, durationMinutes: 0, color: Colors.transparent),
-                          );
-
-                          return DragTarget<ScheduleBooking>(
-                            onWillAcceptWithDetails: (details) => widget.session.isAdmin,
-                            onAcceptWithDetails: (details) {
-                              if (!widget.session.isAdmin) return;
-
-                              if (_hasConflict(details.data, res.id, slotMin, details.data.durationMinutes)) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('⚠️ Επικάλυψη! Η μετακίνηση ακυρώθηκε.'), backgroundColor: Colors.redAccent),
-                                );
-                              } else {
-                                setState(() {
-                                  details.data.resourceId = res.id;
-                                  details.data.startMinuteFrom8AM = slotMin;
-                                });
-                              }
-                            },
-                            builder: (context, candidateData, rejectedData) {
-                              return Container(
-                                width: slotWidth,
+                        // RESOURCE ROWS
+                        ...cat.resources.map((res) {
+                          return Row(
+                            children: [
+                              Container(
+                                width: 180,
                                 height: 55,
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
                                 decoration: BoxDecoration(
-                                  color: candidateData.isNotEmpty
-                                      ? (isDarkMode ? Colors.indigo.shade900 : Colors.indigo.shade50)
-                                      : (isDarkMode ? const Color(0xFF121212) : Colors.white),
-                                  border: Border.all(color: isDarkMode ? Colors.grey.shade900 : Colors.grey.shade200),
+                                  color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+                                  border: Border.all(color: isDarkMode ? Colors.grey.shade800 : Colors.grey.shade300),
                                 ),
-                                child: booking.id.isNotEmpty
-                                    ? (widget.session.isAdmin
-                                        ? Draggable<ScheduleBooking>(
-                                            data: booking,
-                                            feedback: Material(
-                                              elevation: 6,
-                                              child: Container(
-                                                width: (booking.durationMinutes / widget.slotMinutes) * slotWidth,
-                                                height: 45,
-                                                padding: const EdgeInsets.all(6),
-                                                color: booking.color.withOpacity(0.85),
-                                                child: Text(booking.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
-                                              ),
-                                            ),
-                                            childWhenDragging: Container(color: isDarkMode ? Colors.grey.shade800 : Colors.grey.shade100),
-                                            child: InkWell(
-                                              onDoubleTap: () => _showResizeDialog(booking),
-                                              child: _buildBookingTile(booking),
-                                            ),
-                                          )
-                                        : GestureDetector(
-                                            onTap: () {
-                                              ScaffoldMessenger.of(context).showSnackBar(
-                                                const SnackBar(content: Text('🔒 Read-Only: Δεν έχετε δικαιώματα αλλαγών.')),
-                                              );
-                                            },
-                                            child: _buildBookingTile(booking),
-                                          ))
-                                    : null,
-                              );
-                            },
+                                child: Align(alignment: Alignment.centerLeft, child: Text(res.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+                              ),
+                              ...timeSlots.map((slotMin) {
+                                final booking = bookings.firstWhere(
+                                  (b) => b.resourceId == res.id && b.startMinuteFrom8AM == slotMin,
+                                  orElse: () => ScheduleBooking(id: '', title: '', resourceId: '', startMinuteFrom8AM: -1, durationMinutes: 0, color: Colors.transparent),
+                                );
+
+                                return DragTarget<ScheduleBooking>(
+                                  onWillAcceptWithDetails: (details) => widget.session.isAdmin,
+                                  onAcceptWithDetails: (details) {
+                                    if (!widget.session.isAdmin) return;
+
+                                    if (_hasConflict(details.data, res.id, slotMin, details.data.durationMinutes)) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('⚠️ Επικάλυψη! Η μετακίνηση ακυρώθηκε.'), backgroundColor: Colors.redAccent),
+                                      );
+                                    } else {
+                                      setState(() {
+                                        details.data.resourceId = res.id;
+                                        details.data.startMinuteFrom8AM = slotMin;
+                                      });
+                                    }
+                                  },
+                                  builder: (context, candidateData, rejectedData) {
+                                    return Container(
+                                      width: slotWidth,
+                                      height: 55,
+                                      decoration: BoxDecoration(
+                                        color: candidateData.isNotEmpty
+                                            ? (isDarkMode ? Colors.indigo.shade900 : Colors.indigo.shade50)
+                                            : (isDarkMode ? const Color(0xFF121212) : Colors.white),
+                                        border: Border.all(color: isDarkMode ? Colors.grey.shade900 : Colors.grey.shade200),
+                                      ),
+                                      child: booking.id.isNotEmpty
+                                          ? (widget.session.isAdmin
+                                              ? Draggable<ScheduleBooking>(
+                                                  data: booking,
+                                                  feedback: Material(
+                                                    elevation: 6,
+                                                    child: Container(
+                                                      width: (booking.durationMinutes / widget.slotMinutes) * slotWidth,
+                                                      height: 45,
+                                                      padding: const EdgeInsets.all(6),
+                                                      color: booking.color.withOpacity(0.85),
+                                                      child: Text(booking.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                                                    ),
+                                                  ),
+                                                  childWhenDragging: Container(color: isDarkMode ? Colors.grey.shade800 : Colors.grey.shade100),
+                                                  child: InkWell(
+                                                    onDoubleTap: () => _showResizeDialog(booking),
+                                                    child: _buildBookingTile(booking),
+                                                  ),
+                                                )
+                                              : GestureDetector(
+                                                  onTap: () {
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      const SnackBar(content: Text('🔒 Read-Only: Δεν έχετε δικαιώματα αλλαγών.')),
+                                                    );
+                                                  },
+                                                  child: _buildBookingTile(booking),
+                                                ))
+                                          : null,
+                                    );
+                                  },
+                                );
+                              }),
+                            ],
                           );
                         }),
                       ],
