@@ -1,6 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
+// ==========================================
+// 1. GLOBAL STATE MANAGEMENT (THEME CONTROL)
+// ==========================================
+// Χρήση ValueNotifier για ακαριαία εναλλαγή Light/Dark Mode σε όλο το widget tree
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.light);
 
 void main() {
@@ -12,6 +16,7 @@ class SmartSchedulerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Παρακολουθεί το themeNotifier και ξαναζωγραφίζει το MaterialApp αμέσως μόλις αλλάξει
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: themeNotifier,
       builder: (context, currentMode, child) {
@@ -37,9 +42,12 @@ class SmartSchedulerApp extends StatelessWidget {
   }
 }
 
-// 1. MODELS & DATA STRUCTURES
+// ==========================================
+// 2. DATA MODELS & ENTITIES
+// ==========================================
 enum UserRole { admin, viewer }
 
+// Μοντέλο Συνεδρίας Χρήστη (RBAC)
 class UserSession {
   final String username;
   final UserRole role;
@@ -49,6 +57,7 @@ class UserSession {
   bool get isAdmin => role == UserRole.admin;
 }
 
+// Μοντέλο Κατηγορίας (π.χ. Εκπαιδευτικά Αεροπλάνα)
 class Category {
   String id;
   String name;
@@ -57,6 +66,7 @@ class Category {
   Category({required this.id, required this.name, required this.resources});
 }
 
+// Μοντέλο Πόρου / Αεροπλάνου / Θέσης
 class Resource {
   String id;
   String name;
@@ -64,12 +74,13 @@ class Resource {
   Resource({required this.id, required this.name});
 }
 
+// Μοντέλο Κράτησης στο Timeline Grid
 class ScheduleBooking {
   final String id;
   final String title;
   String resourceId;
-  int startMinuteFrom8AM;
-  int durationMinutes;
+  int startMinuteFrom8AM; // Χρονική τοποθέτηση σε λεπτά από τις 08:00
+  int durationMinutes;    // Διάρκεια σε λεπτά
   final Color color;
 
   ScheduleBooking({
@@ -82,7 +93,9 @@ class ScheduleBooking {
   });
 }
 
-// 2. LOGIN SCREEN
+// ==========================================
+// 3. SCREEN: LOGIN & TAΥΤΟΠΟΙΗΣΗ (RBAC)
+// ==========================================
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -101,6 +114,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     UserSession? session;
 
+    // Προσομοίωση ταυτοποίησης ρόλων
     if (username == 'admin' && password == 'admin') {
       session = UserSession(username: 'Administrator', role: UserRole.admin);
     } else if (username == 'user' && password == 'user') {
@@ -110,7 +124,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (session != null) {
       setState(() => errorMessage = null);
       
-      // Αρχικά δεδομένα κατηγοριών
+      // Αρχικοποίηση δεδομένων επίδειξης
       List<Category> initialCategories = [
         Category(
           id: 'cat1',
@@ -129,8 +143,8 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ];
 
+      // Δρομολόγηση ανάλογα με τα δικαιώματα προσβάσης (Admin -> Manager | Viewer -> Wizard)
       if (session.isAdmin) {
-        // Ο Admin οδηγείται πρώτα στη διαχείριση κατηγοριών
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -141,7 +155,6 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         );
       } else {
-        // Ο Viewer πηγαίνει απευθείας στο Setup Wizard
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -222,7 +235,9 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-// 3. CATEGORY & RESOURCE MANAGER SCREEN (ADMIN ONLY)
+// ==========================================
+// 4. SCREEN: ΔΙΑΧΕΙΡΙΣΗ ΚΑΤΗΓΟΡΙΩΝ (ADMIN ONLY)
+// ==========================================
 class CategoryManagerScreen extends StatefulWidget {
   final UserSession session;
   final List<Category> categories;
@@ -250,6 +265,7 @@ class _CategoryManagerScreenState extends State<CategoryManagerScreen> {
     }
   }
 
+  // CRUD Λειτουργίες Κατηγοριών
   void _addCategory() {
     final controller = TextEditingController();
     showDialog(
@@ -313,6 +329,7 @@ class _CategoryManagerScreenState extends State<CategoryManagerScreen> {
     });
   }
 
+  // CRUD Λειτουργίες Υποκατηγοριών / Πόρων
   void _addResource() {
     if (selectedCategory == null) return;
     final controller = TextEditingController();
@@ -477,7 +494,9 @@ class _CategoryManagerScreenState extends State<CategoryManagerScreen> {
   }
 }
 
-// 4. SETUP WIZARD SCREEN
+// ==========================================
+// 5. SCREEN: SETUP WIZARD (GRID CONFIGURATION)
+// ==========================================
 class SetupWizardScreen extends StatefulWidget {
   final UserSession session;
   final List<Category> categories;
@@ -607,7 +626,9 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
   }
 }
 
-// 5. GRID SCREEN (WITH CATEGORY DIVIDERS IN SCHEDULING)
+// ==========================================
+// 6. SCREEN: INTERACTIVE SCHEDULE GRID ENGINE
+// ==========================================
 class SchedulerGridScreen extends StatefulWidget {
   final UserSession session;
   final String domain;
@@ -640,6 +661,8 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
     _now = DateTime.now();
     _generateSlots();
     _loadBookings();
+    
+    // Ανανέωση της τρέχουσας ώρας κάθε 60 δευτερόλεπτα για τη μετακίνηση του Red Indicator Line
     _timer = Timer.periodic(const Duration(minutes: 1), (timer) {
       if (mounted) {
         setState(() {
@@ -655,6 +678,7 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
     super.dispose();
   }
 
+  // Δημιουργία χρονικών βημάτων (slots) από τις 08:00 (0m) έως τις 18:00 (600m)
   void _generateSlots() {
     timeSlots = [];
     for (int min = 0; min < 600; min += widget.slotMinutes) {
@@ -668,6 +692,7 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
     ];
   }
 
+  // Μετατροπή λεπτών από τις 8.00 π.μ. σε μορφή ώρας (π.χ. 60 -> "09:00")
   String _formatMinutesToTime(int minutesFrom8) {
     int totalMinutes = 8 * 60 + minutesFrom8;
     int h = totalMinutes ~/ 60;
@@ -675,21 +700,25 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
     return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
   }
 
+  // ΑΛΓΟΡΙΘΜΟΣ ΕΛΕΓΧΟΥ ΕΠΙΚΑΛΥΨΕΩΝ (CONFLICT VALIDATION ENGINE)
   bool _hasConflict(ScheduleBooking booking, String targetResourceId, int targetStartMin, int durationMin) {
     if (!widget.preventOverlaps) return false;
     int targetEndMin = targetStartMin + durationMin;
 
     for (var b in bookings) {
-      if (b.id == booking.id) continue;
-      if (b.resourceId != targetResourceId) continue;
+      if (b.id == booking.id) continue; // Παράβλεψη της ίδιας της κράτησης
+      if (b.resourceId != targetResourceId) continue; // Έλεγχος μόνο στον ίδιο πόρο
+
       int bStart = b.startMinuteFrom8AM;
       int bEnd = b.startMinuteFrom8AM + b.durationMinutes;
 
+      // Μαθηματικός τύπος τομής διαστημάτων: [A, B] τέμνει [C, D] αν A < D AND B > C
       if (targetStartMin < bEnd && targetEndMin > bStart) return true;
     }
     return false;
   }
 
+  // MΗΧΑΝΙΣΜΟΣ RESIZING (MODAL DIALOG)
   void _showResizeDialog(ScheduleBooking booking) {
     if (!widget.session.isAdmin) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -711,7 +740,7 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
             return AlertDialog(
               title: Text('Αλλαγή Διάρκειας: ${booking.title}'),
               content: Column(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisSize: MainAxisSize.min, // Διορθωμένο σε MainAxisSize.min
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Έναρξη: ${_formatMinutesToTime(booking.startMinuteFrom8AM)}'),
@@ -791,6 +820,7 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     double slotWidth = widget.slotMinutes == 15 ? 60.0 : (widget.slotMinutes == 30 ? 80.0 : 110.0);
 
+    // Υπολογισμός θέσης της Κάθετης Γραμμής Τρέχουσας Ώρας
     int currentMinutesFrom8 = (_now.hour * 60 + _now.minute) - (8 * 60);
     double? timeIndicatorOffset;
 
@@ -820,7 +850,7 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // TIMELINE HEADER
+                  // TIMELINE HEADER ROW
                   Row(
                     children: [
                       Container(
@@ -842,12 +872,12 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
                       ),
                     ],
                   ),
-                  // CATEGORIES & RESOURCES WITH DIVIDERS
+                  // OΜΑΔΟΠΟΙΗΜΕΝΟΙ ΠΟΡΟΙ ΑΝΑ ΚΑΤΗΓΟΡΙΑ ΜΕ ΔΙΑΧΩΡΙΣΤΙΚΕΣ ΓΡΑΜΜΕΣ
                   ...widget.categories.map((cat) {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // CATEGORY DIVIDER HEADER ROW
+                        // HEADER ROW ΚΑΤΗΓΟΡΙΑΣ (DIVIDER)
                         Container(
                           width: 180.0 + (timeSlots.length * slotWidth),
                           height: 32,
@@ -858,7 +888,7 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.indigo),
                           ),
                         ),
-                        // RESOURCE ROWS
+                        // ΓΡΑΜΜΕΣ ΠΟΡΩΝ / ΑΕΡΟΠΛΑΝΩΝ
                         ...cat.resources.map((res) {
                           return Row(
                             children: [
@@ -946,7 +976,7 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
                 ],
               ),
 
-              // CURRENT TIME INDICATOR
+              // RED CURRENT TIME INDICATOR LINE
               if (timeIndicatorOffset != null)
                 Positioned(
                   left: timeIndicatorOffset,
