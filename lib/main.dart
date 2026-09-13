@@ -1,10 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
-// ==========================================
-// 1. GLOBAL STATE MANAGEMENT (THEME CONTROL)
-// ==========================================
-// Χρήση ValueNotifier για ακαριαία εναλλαγή Light/Dark Mode σε όλο το widget tree
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.light);
 
 void main() {
@@ -16,7 +12,6 @@ class SmartSchedulerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Παρακολουθεί το themeNotifier και ξαναζωγραφίζει το MaterialApp αμέσως μόλις αλλάξει
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: themeNotifier,
       builder: (context, currentMode, child) {
@@ -42,12 +37,9 @@ class SmartSchedulerApp extends StatelessWidget {
   }
 }
 
-// ==========================================
-// 2. DATA MODELS & ENTITIES
-// ==========================================
+// 1. MODELS & DATA STRUCTURES
 enum UserRole { admin, viewer }
 
-// Μοντέλο Συνεδρίας Χρήστη (RBAC)
 class UserSession {
   final String username;
   final UserRole role;
@@ -57,7 +49,6 @@ class UserSession {
   bool get isAdmin => role == UserRole.admin;
 }
 
-// Μοντέλο Κατηγορίας (π.χ. Εκπαιδευτικά Αεροπλάνα)
 class Category {
   String id;
   String name;
@@ -66,7 +57,6 @@ class Category {
   Category({required this.id, required this.name, required this.resources});
 }
 
-// Μοντέλο Πόρου / Αεροπλάνου / Θέσης
 class Resource {
   String id;
   String name;
@@ -74,14 +64,33 @@ class Resource {
   Resource({required this.id, required this.name});
 }
 
-// Μοντέλο Κράτησης στο Timeline Grid
+class Instructor {
+  String id;
+  String name;
+
+  Instructor({required this.id, required this.name});
+}
+
+class Cadet {
+  String id;
+  String name;
+
+  Cadet({required this.id, required this.name});
+}
+
 class ScheduleBooking {
   final String id;
-  final String title;
+  String title;
   String resourceId;
-  int startMinuteFrom8AM; // Χρονική τοποθέτηση σε λεπτά από τις 08:00
-  int durationMinutes;    // Διάρκεια σε λεπτά
-  final Color color;
+  int startMinuteFrom8AM;
+  int durationMinutes;
+  Color color;
+  
+  String field1; // Instructor / Driver / Speaker
+  String field2; // Cadet / Student / Plate / Group
+  String field3; // Lesson / Service / Subject
+  String comments;
+  bool isStandby;
 
   ScheduleBooking({
     required this.id,
@@ -90,12 +99,89 @@ class ScheduleBooking {
     required this.startMinuteFrom8AM,
     required this.durationMinutes,
     required this.color,
+    this.field1 = '',
+    this.field2 = '',
+    this.field3 = '',
+    this.comments = '',
+    this.isStandby = false,
   });
 }
 
-// ==========================================
-// 3. SCREEN: LOGIN & TAΥΤΟΠΟΙΗΣΗ (RBAC)
-// ==========================================
+List<Category> getDomainCategories(String domain) {
+  if (domain == 'Parking') {
+    return [
+      Category(
+        id: 'p_cat1',
+        name: 'VIP & Short-Term Parking',
+        resources: [
+          Resource(id: 'pr1', name: 'Spot A-101 (VIP)'),
+          Resource(id: 'pr2', name: 'Spot A-102 (VIP)'),
+        ],
+      ),
+      Category(
+        id: 'p_cat2',
+        name: 'EV Charging Stations',
+        resources: [
+          Resource(id: 'pr3', name: 'EV Charger Fast B-201'),
+          Resource(id: 'pr4', name: 'EV Charger Ultra B-202'),
+        ],
+      ),
+    ];
+  } else if (domain == 'Training') {
+    return [
+      Category(
+        id: 't_cat1',
+        name: 'Theory Classrooms',
+        resources: [
+          Resource(id: 'tr1', name: 'Hall Alpha (Cap: 30)'),
+          Resource(id: 'tr2', name: 'Hall Beta (Cap: 15)'),
+        ],
+      ),
+      Category(
+        id: 't_cat2',
+        name: 'Labs & Simulators',
+        resources: [
+          Resource(id: 'tr3', name: 'IT & VR Lab 1'),
+          Resource(id: 'tr4', name: 'Sim Room 101'),
+        ],
+      ),
+    ];
+  } else {
+    return [
+      Category(
+        id: 'cat1',
+        name: 'Training Aircraft',
+        resources: [
+          Resource(id: 'r1', name: 'Cessna 172 (SX-ABC)'),
+          Resource(id: 'r2', name: 'Piper PA-28 (SX-DEF)'),
+        ],
+      ),
+      Category(
+        id: 'cat2',
+        name: 'Passenger / Travel Aircraft',
+        resources: [
+          Resource(id: 'r3', name: 'Beechcraft Baron (SX-GHI)'),
+        ],
+      ),
+    ];
+  }
+}
+
+List<Instructor> getInitialInstructors() {
+  return [
+    Instructor(id: 'i1', name: 'Capt. Nikos P.'),
+    Instructor(id: 'i2', name: 'Capt. Sarah M.'),
+  ];
+}
+
+List<Cadet> getInitialCadets() {
+  return [
+    Cadet(id: 'c1', name: 'Giorgos S.'),
+    Cadet(id: 'c2', name: 'Alex K.'),
+  ];
+}
+
+// 2. LOGIN SCREEN
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -114,7 +200,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
     UserSession? session;
 
-    // Προσομοίωση ταυτοποίησης ρόλων
     if (username == 'admin' && password == 'admin') {
       session = UserSession(username: 'Administrator', role: UserRole.admin);
     } else if (username == 'user' && password == 'user') {
@@ -124,26 +209,10 @@ class _LoginScreenState extends State<LoginScreen> {
     if (session != null) {
       setState(() => errorMessage = null);
       
-      // Αρχικοποίηση δεδομένων επίδειξης
-      List<Category> initialCategories = [
-        Category(
-          id: 'cat1',
-          name: 'Εκπαιδευτικά Αεροπλάνα',
-          resources: [
-            Resource(id: 'r1', name: 'Cessna 172 (SX-ABC)'),
-            Resource(id: 'r2', name: 'Piper PA-28 (SX-DEF)'),
-          ],
-        ),
-        Category(
-          id: 'cat2',
-          name: 'Επιβατικά / Ταξιδιωτικά',
-          resources: [
-            Resource(id: 'r3', name: 'Beechcraft Baron (SX-GHI)'),
-          ],
-        ),
-      ];
+      List<Category> initialCategories = getDomainCategories('Aviation');
+      List<Instructor> initialInstructors = getInitialInstructors();
+      List<Cadet> initialCadets = getInitialCadets();
 
-      // Δρομολόγηση ανάλογα με τα δικαιώματα προσβάσης (Admin -> Manager | Viewer -> Wizard)
       if (session.isAdmin) {
         Navigator.pushReplacement(
           context,
@@ -151,6 +220,8 @@ class _LoginScreenState extends State<LoginScreen> {
             builder: (context) => CategoryManagerScreen(
               session: session!,
               categories: initialCategories,
+              instructors: initialInstructors,
+              cadets: initialCadets,
             ),
           ),
         );
@@ -161,13 +232,15 @@ class _LoginScreenState extends State<LoginScreen> {
             builder: (context) => SetupWizardScreen(
               session: session!,
               categories: initialCategories,
+              instructors: initialInstructors,
+              cadets: initialCadets,
             ),
           ),
         );
       }
     } else {
       setState(() {
-        errorMessage = 'Λάθος Username ή Password (admin/admin ή user/user)';
+        errorMessage = 'Invalid Username or Password (admin/admin or user/user)';
       });
     }
   }
@@ -225,7 +298,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   foregroundColor: Colors.white,
                 ),
                 onPressed: _handleLogin,
-                child: const Text('Σύνδεση', style: TextStyle(fontSize: 16)),
+                child: const Text('Login', style: TextStyle(fontSize: 16)),
               ),
             ],
           ),
@@ -235,14 +308,20 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-// ==========================================
-// 4. SCREEN: ΔΙΑΧΕΙΡΙΣΗ ΚΑΤΗΓΟΡΙΩΝ (ADMIN ONLY)
-// ==========================================
+// 3. CATEGORY & PERSONNEL MANAGER SCREEN (ADMIN ONLY)
 class CategoryManagerScreen extends StatefulWidget {
   final UserSession session;
   final List<Category> categories;
+  final List<Instructor> instructors;
+  final List<Cadet> cadets;
 
-  const CategoryManagerScreen({super.key, required this.session, required this.categories});
+  const CategoryManagerScreen({
+    super.key,
+    required this.session,
+    required this.categories,
+    required this.instructors,
+    required this.cadets,
+  });
 
   @override
   State<CategoryManagerScreen> createState() => _CategoryManagerScreenState();
@@ -250,31 +329,41 @@ class CategoryManagerScreen extends StatefulWidget {
 
 class _CategoryManagerScreenState extends State<CategoryManagerScreen> {
   late List<Category> categories;
+  late List<Instructor> instructors;
+  late List<Cadet> cadets;
+
   Category? selectedCategory;
   Resource? selectedResource;
+  Instructor? selectedInstructor;
+  Cadet? selectedCadet;
 
   @override
   void initState() {
     super.initState();
     categories = widget.categories;
+    instructors = widget.instructors;
+    cadets = widget.cadets;
+
     if (categories.isNotEmpty) {
       selectedCategory = categories.first;
       if (selectedCategory!.resources.isNotEmpty) {
         selectedResource = selectedCategory!.resources.first;
       }
     }
+    if (instructors.isNotEmpty) selectedInstructor = instructors.first;
+    if (cadets.isNotEmpty) selectedCadet = cadets.first;
   }
 
-  // CRUD Λειτουργίες Κατηγοριών
+  // --- CATEGORIES & RESOURCES MANAGEMENT ---
   void _addCategory() {
     final controller = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Νέα Κατηγορία'),
-        content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'Όνομα Κατηγορίας')),
+        title: const Text('New Category'),
+        content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'Category Name')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Ακύρωση')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () {
               if (controller.text.trim().isNotEmpty) {
@@ -287,7 +376,7 @@ class _CategoryManagerScreenState extends State<CategoryManagerScreen> {
                 Navigator.pop(ctx);
               }
             },
-            child: const Text('Προσθήκη'),
+            child: const Text('Add'),
           )
         ],
       ),
@@ -300,10 +389,10 @@ class _CategoryManagerScreenState extends State<CategoryManagerScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Επεξεργασία Κατηγορίας'),
-        content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'Νέο Όνομα')),
+        title: const Text('Edit Category'),
+        content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'Category Name')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Ακύρωση')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () {
               if (controller.text.trim().isNotEmpty) {
@@ -313,7 +402,7 @@ class _CategoryManagerScreenState extends State<CategoryManagerScreen> {
                 Navigator.pop(ctx);
               }
             },
-            child: const Text('Αποθήκευση'),
+            child: const Text('Save'),
           )
         ],
       ),
@@ -329,17 +418,16 @@ class _CategoryManagerScreenState extends State<CategoryManagerScreen> {
     });
   }
 
-  // CRUD Λειτουργίες Υποκατηγοριών / Πόρων
   void _addResource() {
     if (selectedCategory == null) return;
     final controller = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Νέος Πόρος / Αεροπλάνο (${selectedCategory!.name})'),
-        content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'Όνομα Πόρου')),
+        title: Text('New Resource (${selectedCategory!.name})'),
+        content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'Resource Name')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Ακύρωση')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () {
               if (controller.text.trim().isNotEmpty) {
@@ -351,7 +439,7 @@ class _CategoryManagerScreenState extends State<CategoryManagerScreen> {
                 Navigator.pop(ctx);
               }
             },
-            child: const Text('Προσθήκη'),
+            child: const Text('Add'),
           )
         ],
       ),
@@ -364,10 +452,10 @@ class _CategoryManagerScreenState extends State<CategoryManagerScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Επεξεργασία Πόρου'),
-        content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'Νέο Όνομα')),
+        title: const Text('Edit Resource'),
+        content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'Resource Name')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Ακύρωση')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () {
               if (controller.text.trim().isNotEmpty) {
@@ -377,7 +465,7 @@ class _CategoryManagerScreenState extends State<CategoryManagerScreen> {
                 Navigator.pop(ctx);
               }
             },
-            child: const Text('Αποθήκευση'),
+            child: const Text('Save'),
           )
         ],
       ),
@@ -392,13 +480,137 @@ class _CategoryManagerScreenState extends State<CategoryManagerScreen> {
     });
   }
 
+  // --- INSTRUCTORS MANAGEMENT ---
+  void _addInstructor() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('New Instructor'),
+        content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'Instructor Name')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                setState(() {
+                  final newInst = Instructor(id: DateTime.now().toString(), name: controller.text.trim());
+                  instructors.add(newInst);
+                  selectedInstructor = newInst;
+                });
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Add'),
+          )
+        ],
+      ),
+    );
+  }
+
+  void _editInstructor() {
+    if (selectedInstructor == null) return;
+    final controller = TextEditingController(text: selectedInstructor!.name);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Instructor'),
+        content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'Instructor Name')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                setState(() {
+                  selectedInstructor!.name = controller.text.trim();
+                });
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Save'),
+          )
+        ],
+      ),
+    );
+  }
+
+  void _deleteInstructor() {
+    if (selectedInstructor == null) return;
+    setState(() {
+      instructors.remove(selectedInstructor);
+      selectedInstructor = instructors.isNotEmpty ? instructors.first : null;
+    });
+  }
+
+  // --- CADETS / STUDENTS MANAGEMENT ---
+  void _addCadet() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('New Cadet / Student'),
+        content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'Cadet Name')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                setState(() {
+                  final newCadet = Cadet(id: DateTime.now().toString(), name: controller.text.trim());
+                  cadets.add(newCadet);
+                  selectedCadet = newCadet;
+                });
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Add'),
+          )
+        ],
+      ),
+    );
+  }
+
+  void _editCadet() {
+    if (selectedCadet == null) return;
+    final controller = TextEditingController(text: selectedCadet!.name);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Cadet / Student'),
+        content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'Cadet Name')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                setState(() {
+                  selectedCadet!.name = controller.text.trim();
+                });
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Save'),
+          )
+        ],
+      ),
+    );
+  }
+
+  void _deleteCadet() {
+    if (selectedCadet == null) return;
+    setState(() {
+      cadets.remove(selectedCadet);
+      selectedCadet = cadets.isNotEmpty ? cadets.first : null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = themeNotifier.value == ThemeMode.dark;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Διαχείριση Κατηγοριών & Πόρων'),
+        title: const Text('Admin Resource Manager'),
         actions: [
           IconButton(
             icon: Icon(isDarkMode ? Icons.light_mode : Icons.dark_mode),
@@ -408,85 +620,137 @@ class _CategoryManagerScreenState extends State<CategoryManagerScreen> {
           ),
         ],
       ),
-      body: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 500),
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('1. Κατηγορίες (π.χ. Επιβατικά, Εκπαιδευτικά)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<Category>(
-                value: selectedCategory,
-                decoration: const InputDecoration(border: OutlineInputBorder()),
-                items: categories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat.name))).toList(),
-                onChanged: (val) {
-                  setState(() {
-                    selectedCategory = val;
-                    selectedResource = val != null && val.resources.isNotEmpty ? val.resources.first : null;
-                  });
-                },
-              ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  IconButton.filledTonal(icon: const Icon(Icons.add), onPressed: _addCategory, tooltip: 'Προσθήκη Κατηγορίας'),
-                  const SizedBox(width: 8),
-                  IconButton.filledTonal(icon: const Icon(Icons.edit), onPressed: selectedCategory != null ? _editCategory : null, tooltip: 'Επεξεργασία Κατηγορίας'),
-                  const SizedBox(width: 8),
-                  IconButton.filledTonal(icon: const Icon(Icons.delete), onPressed: selectedCategory != null ? _deleteCategory : null, tooltip: 'Διαγραφή Κατηγορίας'),
-                ],
-              ),
-              const Divider(height: 32),
-              const Text('2. Υποκατηγορίες / Πόροι (π.χ. Αεροπλάνα)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<Resource>(
-                value: selectedResource,
-                decoration: const InputDecoration(border: OutlineInputBorder()),
-                items: selectedCategory != null
-                    ? selectedCategory!.resources.map((res) => DropdownMenuItem(value: res, child: Text(res.name))).toList()
-                    : [],
-                onChanged: (val) {
-                  setState(() {
-                    selectedResource = val;
-                  });
-                },
-              ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  IconButton.filledTonal(icon: const Icon(Icons.add), onPressed: selectedCategory != null ? _addResource : null, tooltip: 'Προσθήκη Πόρου'),
-                  const SizedBox(width: 8),
-                  IconButton.filledTonal(icon: const Icon(Icons.edit), onPressed: selectedResource != null ? _editResource : null, tooltip: 'Επεξεργασία Πόρου'),
-                  const SizedBox(width: 8),
-                  IconButton.filledTonal(icon: const Icon(Icons.delete), onPressed: selectedResource != null ? _deleteResource : null, tooltip: 'Διαγραφή Πόρου'),
-                ],
-              ),
-              const Spacer(),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  backgroundColor: Colors.indigo,
-                  foregroundColor: Colors.white,
+      body: SingleChildScrollView(
+        child: Center(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 550),
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // 1. CATEGORIES
+                const Text('1. Categories', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<Category>(
+                  value: selectedCategory,
+                  decoration: const InputDecoration(border: OutlineInputBorder()),
+                  items: categories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat.name))).toList(),
+                  onChanged: (val) {
+                    setState(() {
+                      selectedCategory = val;
+                      selectedResource = val != null && val.resources.isNotEmpty ? val.resources.first : null;
+                    });
+                  },
                 ),
-                icon: const Icon(Icons.arrow_forward),
-                label: const Text('Συνέχεια στο Setup Wizard'),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => SetupWizardScreen(
-                        session: widget.session,
-                        categories: categories,
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    IconButton.filledTonal(icon: const Icon(Icons.add), onPressed: _addCategory, tooltip: 'Add Category'),
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(icon: const Icon(Icons.edit), onPressed: selectedCategory != null ? _editCategory : null, tooltip: 'Edit Category'),
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(icon: const Icon(Icons.delete), onPressed: selectedCategory != null ? _deleteCategory : null, tooltip: 'Delete Category'),
+                  ],
+                ),
+                const Divider(height: 28),
+
+                // 2. RESOURCES
+                const Text('2. Subcategories / Resources (Aircrafts/Spots)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<Resource>(
+                  value: selectedResource,
+                  decoration: const InputDecoration(border: OutlineInputBorder()),
+                  items: selectedCategory != null
+                      ? selectedCategory!.resources.map((res) => DropdownMenuItem(value: res, child: Text(res.name))).toList()
+                      : [],
+                  onChanged: (val) {
+                    setState(() {
+                      selectedResource = val;
+                    });
+                  },
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    IconButton.filledTonal(icon: const Icon(Icons.add), onPressed: selectedCategory != null ? _addResource : null, tooltip: 'Add Resource'),
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(icon: const Icon(Icons.edit), onPressed: selectedResource != null ? _editResource : null, tooltip: 'Edit Resource'),
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(icon: const Icon(Icons.delete), onPressed: selectedResource != null ? _deleteResource : null, tooltip: 'Delete Resource'),
+                  ],
+                ),
+                const Divider(height: 28),
+
+                // 3. INSTRUCTORS
+                const Text('3. Instructors', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<Instructor>(
+                  value: selectedInstructor,
+                  decoration: const InputDecoration(border: OutlineInputBorder()),
+                  items: instructors.map((inst) => DropdownMenuItem(value: inst, child: Text(inst.name))).toList(),
+                  onChanged: (val) => setState(() => selectedInstructor = val),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    IconButton.filledTonal(icon: const Icon(Icons.add), onPressed: _addInstructor, tooltip: 'Add Instructor'),
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(icon: const Icon(Icons.edit), onPressed: selectedInstructor != null ? _editInstructor : null, tooltip: 'Edit Instructor'),
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(icon: const Icon(Icons.delete), onPressed: selectedInstructor != null ? _deleteInstructor : null, tooltip: 'Delete Instructor'),
+                  ],
+                ),
+                const Divider(height: 28),
+
+                // 4. CADETS / STUDENTS
+                const Text('4. Cadets / Students', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<Cadet>(
+                  value: selectedCadet,
+                  decoration: const InputDecoration(border: OutlineInputBorder()),
+                  items: cadets.map((cadet) => DropdownMenuItem(value: cadet, child: Text(cadet.name))).toList(),
+                  onChanged: (val) => setState(() => selectedCadet = val),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    IconButton.filledTonal(icon: const Icon(Icons.add), onPressed: _addCadet, tooltip: 'Add Cadet'),
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(icon: const Icon(Icons.edit), onPressed: selectedCadet != null ? _editCadet : null, tooltip: 'Edit Cadet'),
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(icon: const Icon(Icons.delete), onPressed: selectedCadet != null ? _deleteCadet : null, tooltip: 'Delete Cadet'),
+                  ],
+                ),
+                const SizedBox(height: 32),
+
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: Colors.indigo,
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.arrow_forward),
+                  label: const Text('Proceed to Setup Wizard'),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => SetupWizardScreen(
+                          session: widget.session,
+                          categories: categories,
+                          instructors: instructors,
+                          cadets: cadets,
+                        ),
                       ),
-                    ),
-                  );
-                },
-              ),
-            ],
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -494,14 +758,20 @@ class _CategoryManagerScreenState extends State<CategoryManagerScreen> {
   }
 }
 
-// ==========================================
-// 5. SCREEN: SETUP WIZARD (GRID CONFIGURATION)
-// ==========================================
+// 4. SETUP WIZARD SCREEN
 class SetupWizardScreen extends StatefulWidget {
   final UserSession session;
   final List<Category> categories;
+  final List<Instructor> instructors;
+  final List<Cadet> cadets;
 
-  const SetupWizardScreen({super.key, required this.session, required this.categories});
+  const SetupWizardScreen({
+    super.key,
+    required this.session,
+    required this.categories,
+    required this.instructors,
+    required this.cadets,
+  });
 
   @override
   State<SetupWizardScreen> createState() => _SetupWizardScreenState();
@@ -512,13 +782,28 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
   int timeSlotMinutes = 30;
   bool preventOverlaps = true;
 
+  List<Category> activeCategories = [];
+
+  @override
+  void initState() {
+    super.initState();
+    activeCategories = widget.categories.isNotEmpty ? widget.categories : getDomainCategories(selectedDomain);
+  }
+
+  void _onDomainChanged(String newDomain) {
+    setState(() {
+      selectedDomain = newDomain;
+      activeCategories = getDomainCategories(newDomain);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = themeNotifier.value == ThemeMode.dark;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Διαμόρφωση Συστήματος'),
+        title: const Text('System Configuration'),
         actions: [
           IconButton(
             icon: Icon(isDarkMode ? Icons.light_mode : Icons.dark_mode),
@@ -547,23 +832,23 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
             children: [
               Chip(
                 avatar: Icon(widget.session.isAdmin ? Icons.admin_panel_settings : Icons.visibility),
-                label: Text('Σύνδεση ως: ${widget.session.username} (${widget.session.isAdmin ? "Admin" : "Read Only"})'),
+                label: Text('Logged in as: ${widget.session.username} (${widget.session.isAdmin ? "Admin" : "Read Only"})'),
               ),
               const SizedBox(height: 20),
-              const Text('Επιλογή Domain', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text('Select Domain', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 value: selectedDomain,
                 decoration: const InputDecoration(border: OutlineInputBorder()),
                 items: const [
-                  DropdownMenuItem(value: 'Aviation', child: Text('Αεροδρόμιο / Σχολή Πτήσεων')),
-                  DropdownMenuItem(value: 'Parking', child: Text('Σταθμός Parking')),
-                  DropdownMenuItem(value: 'Training', child: Text('Κέντρο Εκπαίδευσης')),
+                  DropdownMenuItem(value: 'Aviation', child: Text('Aviation / Flight School')),
+                  DropdownMenuItem(value: 'Parking', child: Text('Parking Lot / EV Station')),
+                  DropdownMenuItem(value: 'Training', child: Text('Training Center')),
                 ],
-                onChanged: (val) => setState(() => selectedDomain = val!),
+                onChanged: (val) => _onDomainChanged(val!),
               ),
               const SizedBox(height: 20),
-              const Text('Βήμα Χρόνου Grid', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text('Grid Time Step', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               SegmentedButton<int>(
                 segments: const [
@@ -577,7 +862,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
               const SizedBox(height: 20),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Αυστηρή απαγόρευση επικαλύψεων'),
+                title: const Text('Strict Conflict Prevention'),
                 value: preventOverlaps,
                 onChanged: (val) => setState(() => preventOverlaps = val),
               ),
@@ -602,7 +887,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                   foregroundColor: Colors.white,
                 ),
                 icon: const Icon(Icons.grid_on),
-                label: const Text('Άνοιγμα Schedule Grid'),
+                label: const Text('Open Schedule Grid'),
                 onPressed: () {
                   Navigator.push(
                     context,
@@ -612,7 +897,9 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                         domain: selectedDomain,
                         slotMinutes: timeSlotMinutes,
                         preventOverlaps: preventOverlaps,
-                        categories: widget.categories,
+                        categories: activeCategories,
+                        instructors: widget.instructors,
+                        cadets: widget.cadets,
                       ),
                     ),
                   );
@@ -626,15 +913,15 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
   }
 }
 
-// ==========================================
-// 6. SCREEN: INTERACTIVE SCHEDULE GRID ENGINE
-// ==========================================
+// 5. SCHEDULER GRID SCREEN (CENTERED TIME LABELS DIRECTLY ABOVE BORDER LINES)
 class SchedulerGridScreen extends StatefulWidget {
   final UserSession session;
   final String domain;
   final int slotMinutes;
   final bool preventOverlaps;
   final List<Category> categories;
+  final List<Instructor> instructors;
+  final List<Cadet> cadets;
 
   const SchedulerGridScreen({
     super.key,
@@ -643,6 +930,8 @@ class SchedulerGridScreen extends StatefulWidget {
     required this.slotMinutes,
     required this.preventOverlaps,
     required this.categories,
+    required this.instructors,
+    required this.cadets,
   });
 
   @override
@@ -655,14 +944,14 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
   Timer? _timer;
   late DateTime _now;
 
+  String? _hoveredSlotKey;
+
   @override
   void initState() {
     super.initState();
     _now = DateTime.now();
     _generateSlots();
     _loadBookings();
-    
-    // Ανανέωση της τρέχουσας ώρας κάθε 60 δευτερόλεπτα για τη μετακίνηση του Red Indicator Line
     _timer = Timer.periodic(const Duration(minutes: 1), (timer) {
       if (mounted) {
         setState(() {
@@ -678,21 +967,70 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
     super.dispose();
   }
 
-  // Δημιουργία χρονικών βημάτων (slots) από τις 08:00 (0m) έως τις 18:00 (600m)
   void _generateSlots() {
     timeSlots = [];
-    for (int min = 0; min < 600; min += widget.slotMinutes) {
+    for (int min = 0; min <= 600; min += widget.slotMinutes) {
       timeSlots.add(min);
     }
   }
 
   void _loadBookings() {
-    bookings = [
-      ScheduleBooking(id: 'b1', title: 'Flight Training', resourceId: 'r1', startMinuteFrom8AM: 60, durationMinutes: 120, color: Colors.blue.shade600),
-    ];
+    final allRes = _allResources;
+    String firstResId = allRes.isNotEmpty ? allRes.first.id : 'r1';
+    String defaultInstructor = widget.instructors.isNotEmpty ? widget.instructors.first.name : 'Capt. Nikos P.';
+    String defaultCadet = widget.cadets.isNotEmpty ? widget.cadets.first.name : 'Giorgos S.';
+
+    if (widget.domain == 'Parking') {
+      bookings = [
+        ScheduleBooking(
+          id: 'b1',
+          title: 'Parking Spot Reserve',
+          resourceId: firstResId,
+          startMinuteFrom8AM: 60,
+          durationMinutes: 120,
+          color: Colors.green.shade700,
+          field1: 'Nikos P.',
+          field2: 'ZAB-1234',
+          field3: 'EV Fast Charge',
+          comments: 'Park near charger',
+          isStandby: false,
+        ),
+      ];
+    } else if (widget.domain == 'Training') {
+      bookings = [
+        ScheduleBooking(
+          id: 'b1',
+          title: 'Flutter Masterclass',
+          resourceId: firstResId,
+          startMinuteFrom8AM: 60,
+          durationMinutes: 180,
+          color: Colors.purple.shade700,
+          field1: 'Dr. Alex',
+          field2: 'Group B2',
+          field3: 'Mobile Dev Course',
+          comments: 'Projector required',
+          isStandby: false,
+        ),
+      ];
+    } else {
+      bookings = [
+        ScheduleBooking(
+          id: 'b1',
+          title: 'Flight Training Slot',
+          resourceId: firstResId,
+          startMinuteFrom8AM: 60,
+          durationMinutes: 120,
+          color: Colors.blue.shade600,
+          field1: defaultInstructor,
+          field2: defaultCadet,
+          field3: 'PPL Navigation',
+          comments: 'Check weather before takeoff',
+          isStandby: false,
+        ),
+      ];
+    }
   }
 
-  // Μετατροπή λεπτών από τις 8.00 π.μ. σε μορφή ώρας (π.χ. 60 -> "09:00")
   String _formatMinutesToTime(int minutesFrom8) {
     int totalMinutes = 8 * 60 + minutesFrom8;
     int h = totalMinutes ~/ 60;
@@ -700,98 +1038,239 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
     return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
   }
 
-  // ΑΛΓΟΡΙΘΜΟΣ ΕΛΕΓΧΟΥ ΕΠΙΚΑΛΥΨΕΩΝ (CONFLICT VALIDATION ENGINE)
+  List<Resource> get _allResources {
+    List<Resource> resList = [];
+    for (var cat in widget.categories) {
+      resList.addAll(cat.resources);
+    }
+    return resList;
+  }
+
   bool _hasConflict(ScheduleBooking booking, String targetResourceId, int targetStartMin, int durationMin) {
     if (!widget.preventOverlaps) return false;
     int targetEndMin = targetStartMin + durationMin;
 
     for (var b in bookings) {
-      if (b.id == booking.id) continue; // Παράβλεψη της ίδιας της κράτησης
-      if (b.resourceId != targetResourceId) continue; // Έλεγχος μόνο στον ίδιο πόρο
-
+      if (b.id == booking.id) continue;
+      if (b.resourceId != targetResourceId) continue;
       int bStart = b.startMinuteFrom8AM;
       int bEnd = b.startMinuteFrom8AM + b.durationMinutes;
 
-      // Μαθηματικός τύπος τομής διαστημάτων: [A, B] τέμνει [C, D] αν A < D AND B > C
       if (targetStartMin < bEnd && targetEndMin > bStart) return true;
     }
     return false;
   }
 
-  // MΗΧΑΝΙΣΜΟΣ RESIZING (MODAL DIALOG)
-  void _showResizeDialog(ScheduleBooking booking) {
+  void _confirmDeleteBooking(ScheduleBooking booking) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirm Deletion'),
+        content: Text('Are you sure you want to delete the booking "${booking.title}"?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () {
+              setState(() {
+                bookings.removeWhere((b) => b.id == booking.id);
+              });
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('🗑️ Booking deleted.'), backgroundColor: Colors.redAccent),
+              );
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showBookingFormDialog({ScheduleBooking? existingBooking, String? initialResourceId, int? initialStartMin}) {
     if (!widget.session.isAdmin) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('🔒 Read-Only: Δεν έχετε δικαιώματα αλλαγών.')),
+        const SnackBar(content: Text('🔒 Read-Only: You do not have edit permissions.')),
       );
       return;
     }
 
-    int tempDuration = booking.durationMinutes;
+    final allRes = _allResources;
+    if (allRes.isEmpty) return;
+
+    bool isEditing = existingBooking != null;
+
+    String selectedResId = isEditing ? existingBooking.resourceId : (initialResourceId ?? allRes.first.id);
+    int selectedStartMin = isEditing ? existingBooking.startMinuteFrom8AM : (initialStartMin ?? 0);
+    int selectedDurationMin = isEditing ? existingBooking.durationMinutes : (widget.slotMinutes * 2);
+
+    String label1 = widget.domain == 'Parking' ? 'Driver Name' : (widget.domain == 'Training' ? 'Trainer / Speaker' : 'Instructor');
+    String label2 = widget.domain == 'Parking' ? 'Vehicle License Plate' : (widget.domain == 'Training' ? 'Group / Class' : 'Cadet / Student');
+    String label3 = widget.domain == 'Parking' ? 'Service / Charge' : (widget.domain == 'Training' ? 'Course / Subject' : 'Flight Lesson Type');
+    String defaultTitle = widget.domain == 'Parking' ? 'Spot Reservation' : (widget.domain == 'Training' ? 'Class Session' : 'Flight Slot');
+
+    final titleController = TextEditingController(text: isEditing ? existingBooking.title : defaultTitle);
+    final field1Controller = TextEditingController(text: isEditing ? existingBooking.field1 : (widget.instructors.isNotEmpty ? widget.instructors.first.name : ''));
+    final field2Controller = TextEditingController(text: isEditing ? existingBooking.field2 : (widget.cadets.isNotEmpty ? widget.cadets.first.name : ''));
+    final field3Controller = TextEditingController(text: isEditing ? existingBooking.field3 : '');
+    final commentsController = TextEditingController(text: isEditing ? existingBooking.comments : '');
+    bool isStandby = isEditing ? existingBooking.isStandby : false;
 
     showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
-          builder: (context, setModalState) {
-            int endMin = booking.startMinuteFrom8AM + tempDuration;
-            bool conflict = _hasConflict(booking, booking.resourceId, booking.startMinuteFrom8AM, tempDuration);
+          builder: (context, setFormState) {
+            bool conflict = _hasConflict(
+              ScheduleBooking(
+                id: isEditing ? existingBooking.id : 'temp',
+                title: '',
+                resourceId: selectedResId,
+                startMinuteFrom8AM: selectedStartMin,
+                durationMinutes: selectedDurationMin,
+                color: Colors.blue,
+              ),
+              selectedResId,
+              selectedStartMin,
+              selectedDurationMin,
+            );
 
             return AlertDialog(
-              title: Text('Αλλαγή Διάρκειας: ${booking.title}'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min, // Διορθωμένο σε MainAxisSize.min
-                crossAxisAlignment: CrossAxisAlignment.start,
+              titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+              title: Row(
                 children: [
-                  Text('Έναρξη: ${_formatMinutesToTime(booking.startMinuteFrom8AM)}'),
-                  Text('Λήξη: ${_formatMinutesToTime(endMin)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      IconButton.filledTonal(
-                        icon: const Icon(Icons.remove),
-                        onPressed: tempDuration > widget.slotMinutes
-                            ? () {
-                                setModalState(() {
-                                  tempDuration -= widget.slotMinutes;
-                                });
-                              }
-                            : null,
-                      ),
-                      Text('$tempDuration λεπτά', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      IconButton.filledTonal(
-                        icon: const Icon(Icons.add),
-                        onPressed: () {
-                          setModalState(() {
-                            tempDuration += widget.slotMinutes;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                  if (conflict) ...[
-                    const SizedBox(height: 12),
-                    const Row(
-                      children: [
-                        Icon(Icons.warning_amber_rounded, color: Colors.red, size: 20),
-                        SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            'Η νέα διάρκεια δημιουργεί επικάλυψη με άλλη κράτηση!',
-                            style: TextStyle(color: Colors.red, fontSize: 12),
-                          ),
-                        ),
-                      ],
+                  Icon(isEditing ? Icons.edit_calendar : Icons.add_task, color: Colors.indigo),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      isEditing ? 'Edit Booking' : 'New Booking ($defaultTitle)',
+                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ],
+                  ),
                 ],
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Ακύρωση'),
+              content: SingleChildScrollView(
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 380),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        value: selectedResId,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: widget.domain == 'Parking' ? 'Spot / Location' : (widget.domain == 'Training' ? 'Classroom / Lab' : 'Aircraft / Resource'),
+                          border: const OutlineInputBorder(),
+                        ),
+                        items: allRes.map((r) => DropdownMenuItem(value: r.id, child: Text(r.name, overflow: TextOverflow.ellipsis))).toList(),
+                        onChanged: (val) => setFormState(() => selectedResId = val!),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<int>(
+                              value: selectedStartMin,
+                              isExpanded: true,
+                              decoration: const InputDecoration(labelText: 'Start Time', border: OutlineInputBorder()),
+                              items: timeSlots.where((s) => s < 600).map((s) => DropdownMenuItem(value: s, child: Text(_formatMinutesToTime(s)))).toList(),
+                              onChanged: (val) => setFormState(() => selectedStartMin = val!),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: DropdownButtonFormField<int>(
+                              value: selectedDurationMin,
+                              isExpanded: true,
+                              decoration: const InputDecoration(labelText: 'Duration', border: OutlineInputBorder()),
+                              items: [15, 30, 45, 60, 90, 120, 180, 240]
+                                  .map((d) => DropdownMenuItem(
+                                        value: d,
+                                        child: Text('${d}m', overflow: TextOverflow.ellipsis),
+                                      ))
+                                  .toList(),
+                              onChanged: (val) => setFormState(() => selectedDurationMin = val!),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: titleController,
+                        decoration: const InputDecoration(labelText: 'Booking Title', border: OutlineInputBorder()),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: field1Controller,
+                              decoration: InputDecoration(labelText: label1, border: const OutlineInputBorder(), prefixIcon: const Icon(Icons.person_outline, size: 20)),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: field2Controller,
+                              decoration: InputDecoration(labelText: label2, border: const OutlineInputBorder(), prefixIcon: const Icon(Icons.badge_outlined, size: 20)),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: field3Controller,
+                        decoration: InputDecoration(labelText: label3, border: const OutlineInputBorder()),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: commentsController,
+                        maxLines: 2,
+                        decoration: const InputDecoration(labelText: 'Comments / Notes', border: OutlineInputBorder()),
+                      ),
+                      const SizedBox(height: 8),
+                      CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Standby Booking', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        subtitle: const Text('Highlight booking with special indicator', style: TextStyle(fontSize: 10)),
+                        value: isStandby,
+                        onChanged: (val) => setFormState(() => isStandby = val ?? false),
+                      ),
+                      if (conflict) ...[
+                        const SizedBox(height: 8),
+                        const Row(
+                          children: [
+                            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 20),
+                            SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                '⚠️ Warning: Overlap detected with another booking!',
+                                style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
+              ),
+              actions: [
+                if (isEditing)
+                  TextButton.icon(
+                    style: TextButton.styleFrom(foregroundColor: Colors.red),
+                    icon: const Icon(Icons.delete),
+                    label: const Text('Delete'),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _confirmDeleteBooking(existingBooking);
+                    },
+                  ),
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: conflict ? Colors.grey : Colors.indigo,
@@ -801,11 +1280,50 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
                       ? null
                       : () {
                           setState(() {
-                            booking.durationMinutes = tempDuration;
+                            Color itemColor = isStandby
+                                ? Colors.orange.shade700
+                                : (widget.domain == 'Parking'
+                                    ? Colors.green.shade700
+                                    : (widget.domain == 'Training' ? Colors.purple.shade700 : Colors.indigo.shade600));
+
+                            if (isEditing) {
+                              existingBooking.title = titleController.text.trim().isEmpty ? 'Booking' : titleController.text.trim();
+                              existingBooking.resourceId = selectedResId;
+                              existingBooking.startMinuteFrom8AM = selectedStartMin;
+                              existingBooking.durationMinutes = selectedDurationMin;
+                              existingBooking.field1 = field1Controller.text.trim();
+                              existingBooking.field2 = field2Controller.text.trim();
+                              existingBooking.field3 = field3Controller.text.trim();
+                              existingBooking.comments = commentsController.text.trim();
+                              existingBooking.isStandby = isStandby;
+                              existingBooking.color = itemColor;
+                            } else {
+                              bookings.add(
+                                ScheduleBooking(
+                                  id: DateTime.now().toString(),
+                                  title: titleController.text.trim().isEmpty ? 'Booking' : titleController.text.trim(),
+                                  resourceId: selectedResId,
+                                  startMinuteFrom8AM: selectedStartMin,
+                                  durationMinutes: selectedDurationMin,
+                                  color: itemColor,
+                                  field1: field1Controller.text.trim(),
+                                  field2: field2Controller.text.trim(),
+                                  field3: field3Controller.text.trim(),
+                                  comments: commentsController.text.trim(),
+                                  isStandby: isStandby,
+                                ),
+                              );
+                            }
                           });
                           Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(isEditing ? '✅ Booking updated!' : '✅ Booking created successfully!'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
                         },
-                  child: const Text('Αποθήκευση'),
+                  child: Text(isEditing ? 'Save' : 'Create'),
                 ),
               ],
             );
@@ -820,7 +1338,6 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     double slotWidth = widget.slotMinutes == 15 ? 60.0 : (widget.slotMinutes == 30 ? 80.0 : 110.0);
 
-    // Υπολογισμός θέσης της Κάθετης Γραμμής Τρέχουσας Ώρας
     int currentMinutesFrom8 = (_now.hour * 60 + _now.minute) - (8 * 60);
     double? timeIndicatorOffset;
 
@@ -828,6 +1345,8 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
       double pixelsPerMinute = slotWidth / widget.slotMinutes;
       timeIndicatorOffset = 180.0 + (currentMinutesFrom8 * pixelsPerMinute);
     }
+
+    List<int> gridSlots = timeSlots.where((s) => s < 600).toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -841,194 +1360,364 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        scrollDirection: Axis.vertical,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Stack(
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // TIMELINE HEADER ROW
-                  Row(
-                    children: [
-                      Container(
-                        width: 180,
-                        height: 45,
-                        color: isDarkMode ? Colors.grey.shade900 : Colors.grey.shade300,
-                        child: const Center(child: Text('Κατηγορίες / Πόροι', style: TextStyle(fontWeight: FontWeight.bold))),
-                      ),
-                      ...timeSlots.map(
-                        (min) => Container(
-                          width: slotWidth,
-                          height: 45,
-                          decoration: BoxDecoration(
-                            color: isDarkMode ? Colors.grey.shade800 : Colors.grey.shade100,
-                            border: Border.all(color: isDarkMode ? Colors.grey.shade700 : Colors.grey.shade300),
-                          ),
-                          child: Center(child: Text(_formatMinutesToTime(min), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-                        ),
-                      ),
-                    ],
-                  ),
-                  // OΜΑΔΟΠΟΙΗΜΕΝΟΙ ΠΟΡΟΙ ΑΝΑ ΚΑΤΗΓΟΡΙΑ ΜΕ ΔΙΑΧΩΡΙΣΤΙΚΕΣ ΓΡΑΜΜΕΣ
-                  ...widget.categories.map((cat) {
-                    return Column(
+      floatingActionButton: widget.session.isAdmin
+          ? FloatingActionButton.extended(
+              onPressed: () => _showBookingFormDialog(),
+              icon: const Icon(Icons.add),
+              label: const Text('New Booking'),
+              backgroundColor: Colors.indigo,
+              foregroundColor: Colors.white,
+            )
+          : null,
+      body: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.vertical,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Stack(
+                  children: [
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // HEADER ROW ΚΑΤΗΓΟΡΙΑΣ (DIVIDER)
-                        Container(
-                          width: 180.0 + (timeSlots.length * slotWidth),
-                          height: 32,
-                          color: isDarkMode ? Colors.indigo.shade900.withOpacity(0.6) : Colors.indigo.shade100,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          child: Text(
-                            '📂 ${cat.name.toUpperCase()}',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.indigo),
-                          ),
+                        // TIMELINE HEADER WITH TIME LABELS EXACTLY CENTERED OVER GRIDLINES
+                        Row(
+                          children: [
+                            Container(
+                              width: 180,
+                              height: 45,
+                              color: isDarkMode ? Colors.grey.shade900 : Colors.grey.shade300,
+                              child: const Center(child: Text('Categories / Resources', style: TextStyle(fontWeight: FontWeight.bold))),
+                            ),
+                            SizedBox(
+                              width: gridSlots.length * slotWidth,
+                              height: 45,
+                              child: Stack(
+                                children: [
+                                  // Grid Background slots with borders
+                                  Row(
+                                    children: gridSlots
+                                        .map(
+                                          (min) => Container(
+                                            width: slotWidth,
+                                            height: 45,
+                                            decoration: BoxDecoration(
+                                              color: isDarkMode ? Colors.grey.shade800 : Colors.grey.shade100,
+                                              border: Border(
+                                                left: BorderSide(color: isDarkMode ? Colors.grey.shade600 : Colors.grey.shade400, width: 1.5),
+                                                top: BorderSide(color: isDarkMode ? Colors.grey.shade700 : Colors.grey.shade300),
+                                                bottom: BorderSide(color: isDarkMode ? Colors.grey.shade700 : Colors.grey.shade300),
+                                              ),
+                                            ),
+                                          ),
+                                        )
+                                        .toList(),
+                                  ),
+                                  // Centered Time Labels directly over the Left Border Gridlines
+                                  ...gridSlots.asMap().entries.map((entry) {
+                                    int index = entry.key;
+                                    int min = entry.value;
+                                    return Positioned(
+                                      left: (index * slotWidth) - 25, // Center the label over the gridline
+                                      top: 12,
+                                      child: SizedBox(
+                                        width: 50,
+                                        child: Text(
+                                          _formatMinutesToTime(min),
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                    );
+                                  }),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                        // ΓΡΑΜΜΕΣ ΠΟΡΩΝ / ΑΕΡΟΠΛΑΝΩΝ
-                        ...cat.resources.map((res) {
-                          return Row(
+
+                        // ROWS & MULTI-SLOT SPANNING BOOKINGS
+                        ...widget.categories.map((cat) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Container(
-                                width: 180,
-                                height: 55,
-                                padding: const EdgeInsets.symmetric(horizontal: 12),
-                                decoration: BoxDecoration(
-                                  color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
-                                  border: Border.all(color: isDarkMode ? Colors.grey.shade800 : Colors.grey.shade300),
+                                width: 180.0 + (gridSlots.length * slotWidth),
+                                height: 32,
+                                color: isDarkMode ? Colors.indigo.shade900.withOpacity(0.6) : Colors.indigo.shade100,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                child: Text(
+                                  '📂 ${cat.name.toUpperCase()}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.indigo),
                                 ),
-                                child: Align(alignment: Alignment.centerLeft, child: Text(res.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
                               ),
-                              ...timeSlots.map((slotMin) {
-                                final booking = bookings.firstWhere(
-                                  (b) => b.resourceId == res.id && b.startMinuteFrom8AM == slotMin,
-                                  orElse: () => ScheduleBooking(id: '', title: '', resourceId: '', startMinuteFrom8AM: -1, durationMinutes: 0, color: Colors.transparent),
-                                );
-
-                                return DragTarget<ScheduleBooking>(
-                                  onWillAcceptWithDetails: (details) => widget.session.isAdmin,
-                                  onAcceptWithDetails: (details) {
-                                    if (!widget.session.isAdmin) return;
-
-                                    if (_hasConflict(details.data, res.id, slotMin, details.data.durationMinutes)) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('⚠️ Επικάλυψη! Η μετακίνηση ακυρώθηκε.'), backgroundColor: Colors.redAccent),
-                                      );
-                                    } else {
-                                      setState(() {
-                                        details.data.resourceId = res.id;
-                                        details.data.startMinuteFrom8AM = slotMin;
-                                      });
-                                    }
-                                  },
-                                  builder: (context, candidateData, rejectedData) {
-                                    return Container(
-                                      width: slotWidth,
+                              ...cat.resources.map((res) {
+                                return Row(
+                                  children: [
+                                    Container(
+                                      width: 180,
                                       height: 55,
+                                      padding: const EdgeInsets.symmetric(horizontal: 12),
                                       decoration: BoxDecoration(
-                                        color: candidateData.isNotEmpty
-                                            ? (isDarkMode ? Colors.indigo.shade900 : Colors.indigo.shade50)
-                                            : (isDarkMode ? const Color(0xFF121212) : Colors.white),
-                                        border: Border.all(color: isDarkMode ? Colors.grey.shade900 : Colors.grey.shade200),
+                                        color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+                                        border: Border.all(color: isDarkMode ? Colors.grey.shade800 : Colors.grey.shade300),
                                       ),
-                                      child: booking.id.isNotEmpty
-                                          ? (widget.session.isAdmin
-                                              ? Draggable<ScheduleBooking>(
-                                                  data: booking,
-                                                  feedback: Material(
-                                                    elevation: 6,
-                                                    child: Container(
-                                                      width: (booking.durationMinutes / widget.slotMinutes) * slotWidth,
-                                                      height: 45,
-                                                      padding: const EdgeInsets.all(6),
-                                                      color: booking.color.withOpacity(0.85),
-                                                      child: Text(booking.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
-                                                    ),
-                                                  ),
-                                                  childWhenDragging: Container(color: isDarkMode ? Colors.grey.shade800 : Colors.grey.shade100),
-                                                  child: InkWell(
-                                                    onDoubleTap: () => _showResizeDialog(booking),
-                                                    child: _buildBookingTile(booking),
-                                                  ),
-                                                )
-                                              : GestureDetector(
-                                                  onTap: () {
+                                      child: Align(alignment: Alignment.centerLeft, child: Text(res.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+                                    ),
+                                    Builder(
+                                      builder: (context) {
+                                        List<Widget> slotWidgets = [];
+                                        int slotIndex = 0;
+
+                                        while (slotIndex < gridSlots.length) {
+                                          int slotMin = gridSlots[slotIndex];
+
+                                          final bookingIndex = bookings.indexWhere(
+                                            (b) => b.resourceId == res.id && b.startMinuteFrom8AM == slotMin,
+                                          );
+
+                                          if (bookingIndex != -1) {
+                                            final booking = bookings[bookingIndex];
+                                            
+                                            int spannedSlots = (booking.durationMinutes / widget.slotMinutes).ceil();
+                                            if (spannedSlots < 1) spannedSlots = 1;
+
+                                            double bookingWidth = slotWidth * spannedSlots;
+
+                                            slotWidgets.add(
+                                              DragTarget<ScheduleBooking>(
+                                                onWillAcceptWithDetails: (details) => widget.session.isAdmin,
+                                                onAcceptWithDetails: (details) {
+                                                  if (!widget.session.isAdmin) return;
+                                                  if (_hasConflict(details.data, res.id, slotMin, details.data.durationMinutes)) {
                                                     ScaffoldMessenger.of(context).showSnackBar(
-                                                      const SnackBar(content: Text('🔒 Read-Only: Δεν έχετε δικαιώματα αλλαγών.')),
+                                                      const SnackBar(content: Text('⚠️ Overlap! Drag cancelled.'), backgroundColor: Colors.redAccent),
                                                     );
-                                                  },
-                                                  child: _buildBookingTile(booking),
-                                                ))
-                                          : null,
-                                    );
-                                  },
+                                                  } else {
+                                                    setState(() {
+                                                      details.data.resourceId = res.id;
+                                                      details.data.startMinuteFrom8AM = slotMin;
+                                                    });
+                                                  }
+                                                },
+                                                builder: (context, candidateData, rejectedData) {
+                                                  return Container(
+                                                    width: bookingWidth,
+                                                    height: 55,
+                                                    decoration: BoxDecoration(
+                                                      border: Border(
+                                                        left: BorderSide(color: isDarkMode ? Colors.grey.shade700 : Colors.grey.shade300, width: 1.5),
+                                                        top: BorderSide(color: isDarkMode ? Colors.grey.shade900 : Colors.grey.shade200),
+                                                        bottom: BorderSide(color: isDarkMode ? Colors.grey.shade900 : Colors.grey.shade200),
+                                                      ),
+                                                    ),
+                                                    child: widget.session.isAdmin
+                                                        ? Draggable<ScheduleBooking>(
+                                                            data: booking,
+                                                            feedback: Material(
+                                                              elevation: 6,
+                                                              child: Container(
+                                                                width: bookingWidth,
+                                                                height: 45,
+                                                                padding: const EdgeInsets.all(6),
+                                                                color: booking.color.withOpacity(0.85),
+                                                                child: Text(booking.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                                                              ),
+                                                            ),
+                                                            childWhenDragging: Container(color: isDarkMode ? Colors.grey.shade800 : Colors.grey.shade100),
+                                                            child: InkWell(
+                                                              onTap: () => _showBookingFormDialog(existingBooking: booking),
+                                                              child: _buildBookingTile(booking, bookingWidth),
+                                                            ),
+                                                          )
+                                                        : GestureDetector(
+                                                            onTap: () {
+                                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                                const SnackBar(content: Text('🔒 Read-Only: You do not have edit permissions.')),
+                                                              );
+                                                            },
+                                                            child: _buildBookingTile(booking, bookingWidth),
+                                                          ),
+                                                  );
+                                                },
+                                              ),
+                                            );
+
+                                            slotIndex += spannedSlots;
+                                          } else {
+                                            String slotKey = '${res.id}_$slotMin';
+                                            bool isHovered = _hoveredSlotKey == slotKey;
+
+                                            slotWidgets.add(
+                                              DragTarget<ScheduleBooking>(
+                                                onWillAcceptWithDetails: (details) => widget.session.isAdmin,
+                                                onAcceptWithDetails: (details) {
+                                                  if (!widget.session.isAdmin) return;
+                                                  if (_hasConflict(details.data, res.id, slotMin, details.data.durationMinutes)) {
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      const SnackBar(content: Text('⚠️ Overlap! Drag cancelled.'), backgroundColor: Colors.redAccent),
+                                                    );
+                                                  } else {
+                                                    setState(() {
+                                                      details.data.resourceId = res.id;
+                                                      details.data.startMinuteFrom8AM = slotMin;
+                                                    });
+                                                  }
+                                                },
+                                                builder: (context, candidateData, rejectedData) {
+                                                  return MouseRegion(
+                                                    onEnter: (_) => setState(() => _hoveredSlotKey = slotKey),
+                                                    onExit: (_) => setState(() => _hoveredSlotKey = null),
+                                                    child: Container(
+                                                      width: slotWidth,
+                                                      height: 55,
+                                                      decoration: BoxDecoration(
+                                                        color: candidateData.isNotEmpty
+                                                            ? (isDarkMode ? Colors.indigo.shade900 : Colors.indigo.shade50)
+                                                            : (isDarkMode ? const Color(0xFF121212) : Colors.white),
+                                                        border: Border(
+                                                          left: BorderSide(color: isDarkMode ? Colors.grey.shade700 : Colors.grey.shade300, width: 1.5),
+                                                          top: BorderSide(color: isDarkMode ? Colors.grey.shade900 : Colors.grey.shade200),
+                                                          bottom: BorderSide(color: isDarkMode ? Colors.grey.shade900 : Colors.grey.shade200),
+                                                        ),
+                                                      ),
+                                                      child: isHovered && widget.session.isAdmin
+                                                          ? Center(
+                                                              child: IconButton(
+                                                                icon: const Icon(Icons.add_circle, color: Colors.indigo, size: 22),
+                                                                onPressed: () => _showBookingFormDialog(
+                                                                  initialResourceId: res.id,
+                                                                  initialStartMin: slotMin,
+                                                                ),
+                                                                tooltip: 'New booking on this slot',
+                                                              ),
+                                                            )
+                                                          : null,
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                            );
+                                            slotIndex++;
+                                          }
+                                        }
+
+                                        return Row(children: slotWidgets);
+                                      },
+                                    ),
+                                  ],
                                 );
                               }),
                             ],
                           );
                         }),
                       ],
-                    );
-                  }),
-                ],
-              ),
-
-              // RED CURRENT TIME INDICATOR LINE
-              if (timeIndicatorOffset != null)
-                Positioned(
-                  left: timeIndicatorOffset,
-                  top: 0,
-                  bottom: 0,
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: const BoxDecoration(
-                          color: Colors.redAccent,
-                          shape: BoxShape.circle,
+                    ),
+                    if (timeIndicatorOffset != null)
+                      Positioned(
+                        left: timeIndicatorOffset,
+                        top: 0,
+                        bottom: 0,
+                        child: Column(
+                          children: [
+                            Container(
+                              width: 10,
+                              height: 10,
+                              decoration: const BoxDecoration(
+                                color: Colors.redAccent,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            Expanded(
+                              child: Container(
+                                width: 2,
+                                color: Colors.redAccent,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      Expanded(
-                        child: Container(
-                          width: 2,
-                          color: Colors.redAccent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (widget.session.isAdmin)
+            DragTarget<ScheduleBooking>(
+              onAcceptWithDetails: (details) {
+                _confirmDeleteBooking(details.data);
+              },
+              builder: (context, candidateData, rejectedData) {
+                bool isHovered = candidateData.isNotEmpty;
+                return Container(
+                  height: 50,
+                  width: double.infinity,
+                  color: isHovered ? Colors.red.shade700 : Colors.red.shade900.withOpacity(0.8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.delete_forever, color: isHovered ? Colors.yellow : Colors.white, size: 26),
+                      const SizedBox(width: 8),
+                      Text(
+                        isHovered ? 'Drop here to DELETE' : 'Drag booking here to delete (Trash Zone)',
+                        style: TextStyle(
+                          color: isHovered ? Colors.yellow : Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
                         ),
                       ),
                     ],
                   ),
-                ),
-            ],
-          ),
-        ),
+                );
+              },
+            ),
+        ],
       ),
     );
   }
 
-  Widget _buildBookingTile(ScheduleBooking booking) {
+  Widget _buildBookingTile(ScheduleBooking booking, double itemWidth) {
+    int startMin = booking.startMinuteFrom8AM;
+    int endMin = booking.startMinuteFrom8AM + booking.durationMinutes;
+
     return Container(
+      width: itemWidth - 4,
       margin: const EdgeInsets.all(2),
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       decoration: BoxDecoration(
         color: booking.color,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(6),
+        border: booking.isStandby ? Border.all(color: Colors.amberAccent, width: 2) : null,
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  booking.title,
+                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (booking.isStandby)
+                const Text('⏳', style: TextStyle(fontSize: 10)),
+            ],
+          ),
           Text(
-            booking.title,
-            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+            '${_formatMinutesToTime(startMin)} - ${_formatMinutesToTime(endMin)} (${booking.durationMinutes}m)',
+            style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w600),
             overflow: TextOverflow.ellipsis,
           ),
-          Text(
-            '${booking.durationMinutes}m',
-            style: const TextStyle(color: Colors.white70, fontSize: 9),
-          ),
+          if (booking.field1.isNotEmpty)
+            Text(
+              booking.field1,
+              style: const TextStyle(color: Colors.white70, fontSize: 8),
+              overflow: TextOverflow.ellipsis,
+            ),
         ],
       ),
     );
