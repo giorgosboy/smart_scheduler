@@ -39,6 +39,7 @@ class SmartSchedulerApp extends StatelessWidget {
 
 // 1. MODELS & DATA STRUCTURES
 enum UserRole { admin, viewer }
+enum BookingStatus { pending, completed, cancelled }
 
 class UserSession {
   final String username;
@@ -91,6 +92,8 @@ class ScheduleBooking {
   String field3; // Lesson / Service / Subject
   String comments;
   bool isStandby;
+  
+  bool isCancelledManually;
 
   ScheduleBooking({
     required this.id,
@@ -104,7 +107,24 @@ class ScheduleBooking {
     this.field3 = '',
     this.comments = '',
     this.isStandby = false,
+    this.isCancelledManually = false,
   });
+
+  // Calculate Status dynamically based on Current Time
+  BookingStatus getStatus(DateTime now) {
+    if (isCancelledManually == true) {
+      return BookingStatus.cancelled;
+    }
+
+    int currentMinutesFrom8 = (now.hour * 60 + now.minute) - (8 * 60);
+    int endMinuteFrom8 = startMinuteFrom8AM + durationMinutes;
+
+    if (currentMinutesFrom8 >= endMinuteFrom8) {
+      return BookingStatus.completed;
+    }
+
+    return BookingStatus.pending;
+  }
 }
 
 List<Category> getDomainCategories(String domain) {
@@ -354,7 +374,6 @@ class _CategoryManagerScreenState extends State<CategoryManagerScreen> {
     if (cadets.isNotEmpty) selectedCadet = cadets.first;
   }
 
-  // --- CATEGORIES & RESOURCES MANAGEMENT ---
   void _addCategory() {
     final controller = TextEditingController();
     showDialog(
@@ -480,7 +499,6 @@ class _CategoryManagerScreenState extends State<CategoryManagerScreen> {
     });
   }
 
-  // --- INSTRUCTORS MANAGEMENT ---
   void _addInstructor() {
     final controller = TextEditingController();
     showDialog(
@@ -542,7 +560,6 @@ class _CategoryManagerScreenState extends State<CategoryManagerScreen> {
     });
   }
 
-  // --- CADETS / STUDENTS MANAGEMENT ---
   void _addCadet() {
     final controller = TextEditingController();
     showDialog(
@@ -628,7 +645,6 @@ class _CategoryManagerScreenState extends State<CategoryManagerScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 1. CATEGORIES
                 const Text('1. Categories', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<Category>(
@@ -655,7 +671,6 @@ class _CategoryManagerScreenState extends State<CategoryManagerScreen> {
                 ),
                 const Divider(height: 28),
 
-                // 2. RESOURCES
                 const Text('2. Subcategories / Resources (Aircrafts/Spots)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<Resource>(
@@ -683,7 +698,6 @@ class _CategoryManagerScreenState extends State<CategoryManagerScreen> {
                 ),
                 const Divider(height: 28),
 
-                // 3. INSTRUCTORS
                 const Text('3. Instructors', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<Instructor>(
@@ -705,7 +719,6 @@ class _CategoryManagerScreenState extends State<CategoryManagerScreen> {
                 ),
                 const Divider(height: 28),
 
-                // 4. CADETS / STUDENTS
                 const Text('4. Cadets / Students', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<Cadet>(
@@ -913,7 +926,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
   }
 }
 
-// 5. SCHEDULER GRID SCREEN (CENTERED TIME LABELS DIRECTLY ABOVE BORDER LINES)
+// 5. SCHEDULER GRID SCREEN (DYNAMIC COLORING: GREEN FOR COMPLETED, RED FOR CANCELLED)
 class SchedulerGridScreen extends StatefulWidget {
   final UserSession session;
   final String domain;
@@ -988,7 +1001,7 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
           resourceId: firstResId,
           startMinuteFrom8AM: 60,
           durationMinutes: 120,
-          color: Colors.green.shade700,
+          color: Colors.indigo.shade600,
           field1: 'Nikos P.',
           field2: 'ZAB-1234',
           field3: 'EV Fast Charge',
@@ -1004,7 +1017,7 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
           resourceId: firstResId,
           startMinuteFrom8AM: 60,
           durationMinutes: 180,
-          color: Colors.purple.shade700,
+          color: Colors.indigo.shade600,
           field1: 'Dr. Alex',
           field2: 'Group B2',
           field3: 'Mobile Dev Course',
@@ -1020,7 +1033,7 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
           resourceId: firstResId,
           startMinuteFrom8AM: 60,
           durationMinutes: 120,
-          color: Colors.blue.shade600,
+          color: Colors.indigo.shade600,
           field1: defaultInstructor,
           field2: defaultCadet,
           field3: 'PPL Navigation',
@@ -1053,6 +1066,8 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
     for (var b in bookings) {
       if (b.id == booking.id) continue;
       if (b.resourceId != targetResourceId) continue;
+      if (b.getStatus(_now) == BookingStatus.cancelled) continue;
+
       int bStart = b.startMinuteFrom8AM;
       int bEnd = b.startMinuteFrom8AM + b.durationMinutes;
 
@@ -1121,6 +1136,8 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setFormState) {
+            BookingStatus currentStatus = isEditing ? existingBooking.getStatus(_now) : BookingStatus.pending;
+
             bool conflict = _hasConflict(
               ScheduleBooking(
                 id: isEditing ? existingBooking.id : 'temp',
@@ -1128,7 +1145,7 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
                 resourceId: selectedResId,
                 startMinuteFrom8AM: selectedStartMin,
                 durationMinutes: selectedDurationMin,
-                color: Colors.blue,
+                color: Colors.indigo.shade600,
               ),
               selectedResId,
               selectedStartMin,
@@ -1158,7 +1175,50 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(height: 10),
+                      // READ-ONLY STATUS BADGE
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).brightness == Brightness.dark ? Colors.grey.shade900 : Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Status (Automatic):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            Chip(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              backgroundColor: currentStatus == BookingStatus.cancelled
+                                  ? Colors.red.shade100
+                                  : (currentStatus == BookingStatus.completed ? Colors.green.shade100 : Colors.amber.shade100),
+                              side: BorderSide.none,
+                              avatar: Icon(
+                                currentStatus == BookingStatus.cancelled
+                                    ? Icons.cancel
+                                    : (currentStatus == BookingStatus.completed ? Icons.check_circle : Icons.schedule),
+                                size: 16,
+                                color: currentStatus == BookingStatus.cancelled
+                                    ? Colors.red.shade900
+                                    : (currentStatus == BookingStatus.completed ? Colors.green.shade900 : Colors.amber.shade900),
+                              ),
+                              label: Text(
+                                currentStatus.name.toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: currentStatus == BookingStatus.cancelled
+                                      ? Colors.red.shade900
+                                      : (currentStatus == BookingStatus.completed ? Colors.green.shade900 : Colors.amber.shade900),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
                       DropdownButtonFormField<String>(
                         value: selectedResId,
                         isExpanded: true,
@@ -1240,6 +1300,34 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
                         value: isStandby,
                         onChanged: (val) => setFormState(() => isStandby = val ?? false),
                       ),
+
+                      // ROUNDED CANCEL BUTTON
+                      if (isEditing && currentStatus != BookingStatus.cancelled) ...[
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.red.shade700,
+                              side: BorderSide(color: Colors.red.shade300, width: 1.5),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            icon: const Icon(Icons.cancel_outlined, size: 18),
+                            label: const Text('Cancel Booking (Set Status to Cancelled)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            onPressed: () {
+                              setState(() {
+                                existingBooking.isCancelledManually = true;
+                              });
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('🛑 Booking marked as Cancelled.'), backgroundColor: Colors.redAccent),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+
                       if (conflict) ...[
                         const SizedBox(height: 8),
                         const Row(
@@ -1270,7 +1358,7 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
                       _confirmDeleteBooking(existingBooking);
                     },
                   ),
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: conflict ? Colors.grey : Colors.indigo,
@@ -1282,9 +1370,7 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
                           setState(() {
                             Color itemColor = isStandby
                                 ? Colors.orange.shade700
-                                : (widget.domain == 'Parking'
-                                    ? Colors.green.shade700
-                                    : (widget.domain == 'Training' ? Colors.purple.shade700 : Colors.indigo.shade600));
+                                : Colors.indigo.shade600;
 
                             if (isEditing) {
                               existingBooking.title = titleController.text.trim().isEmpty ? 'Booking' : titleController.text.trim();
@@ -1381,7 +1467,6 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // TIMELINE HEADER WITH TIME LABELS EXACTLY CENTERED OVER GRIDLINES
                         Row(
                           children: [
                             Container(
@@ -1395,7 +1480,6 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
                               height: 45,
                               child: Stack(
                                 children: [
-                                  // Grid Background slots with borders
                                   Row(
                                     children: gridSlots
                                         .map(
@@ -1414,12 +1498,11 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
                                         )
                                         .toList(),
                                   ),
-                                  // Centered Time Labels directly over the Left Border Gridlines
                                   ...gridSlots.asMap().entries.map((entry) {
                                     int index = entry.key;
                                     int min = entry.value;
                                     return Positioned(
-                                      left: (index * slotWidth) - 25, // Center the label over the gridline
+                                      left: (index * slotWidth) - 25,
                                       top: 12,
                                       child: SizedBox(
                                         width: 50,
@@ -1436,8 +1519,6 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
                             ),
                           ],
                         ),
-
-                        // ROWS & MULTI-SLOT SPANNING BOOKINGS
                         ...widget.categories.map((cat) {
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1680,13 +1761,25 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
   Widget _buildBookingTile(ScheduleBooking booking, double itemWidth) {
     int startMin = booking.startMinuteFrom8AM;
     int endMin = booking.startMinuteFrom8AM + booking.durationMinutes;
+    BookingStatus status = booking.getStatus(_now);
+
+    // DYNAMIC COLOR SELECTION:
+    // Cancelled -> RED
+    // Completed -> GREEN
+    // Pending   -> Default Booking Color
+    Color tileColor = booking.color;
+    if (status == BookingStatus.cancelled) {
+      tileColor = Colors.red.shade800;
+    } else if (status == BookingStatus.completed) {
+      tileColor = Colors.green.shade700;
+    }
 
     return Container(
       width: itemWidth - 4,
       margin: const EdgeInsets.all(2),
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       decoration: BoxDecoration(
-        color: booking.color,
+        color: tileColor,
         borderRadius: BorderRadius.circular(6),
         border: booking.isStandby ? Border.all(color: Colors.amberAccent, width: 2) : null,
       ),
@@ -1699,7 +1792,12 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
               Expanded(
                 child: Text(
                   booking.title,
-                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    decoration: status == BookingStatus.cancelled ? TextDecoration.lineThrough : null,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -1712,12 +1810,22 @@ class _SchedulerGridScreenState extends State<SchedulerGridScreen> {
             style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w600),
             overflow: TextOverflow.ellipsis,
           ),
-          if (booking.field1.isNotEmpty)
-            Text(
-              booking.field1,
-              style: const TextStyle(color: Colors.white70, fontSize: 8),
-              overflow: TextOverflow.ellipsis,
-            ),
+          Row(
+            children: [
+              if (booking.field1.isNotEmpty)
+                Expanded(
+                  child: Text(
+                    booking.field1,
+                    style: const TextStyle(color: Colors.white70, fontSize: 8),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              if (status == BookingStatus.completed)
+                const Text('✓ Completed', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold))
+              else if (status == BookingStatus.cancelled)
+                const Text('🚫 Cancelled', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+            ],
+          ),
         ],
       ),
     );
